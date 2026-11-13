@@ -169,6 +169,24 @@ export interface Project {
   vaasthu: VaasthuSettings;
   finishes: Finishes;
   roof: RoofSettings;
+  /** Imported plan drawings shown under the plan (one per floor at most). */
+  underlays: Underlay[];
+}
+
+export interface Underlay {
+  id: Id;
+  floorId: Id;
+  name: string;
+  /** Cropped, north-up picture as a data URL. */
+  dataUrl: string;
+  /** Where the picture sits on the plot (mm, north-west corner and size). */
+  x: number;
+  y: number;
+  w: number;
+  d: number;
+  /** 0–1 */
+  opacity: number;
+  showIn3d: boolean;
 }
 
 export type ZoneRating = 'preferred' | 'acceptable' | 'avoid' | 'neutral';

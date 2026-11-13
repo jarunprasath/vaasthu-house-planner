@@ -4,7 +4,9 @@ import { createFloor, createOpening, createProject, newId } from '../model/facto
 import { pointAlongWall, wallLength } from '../model/geometry';
 import { buildCompoundWalls, rebuildFloorWalls } from '../model/wallBuilder';
 import { defaultFootprint, houseContents } from '../model/footprint';
-import type { Floor, Footprint, Opening, OpeningType, Project, Room, Side, Wall } from '../model/types';
+import type { Floor, Footprint, Opening, OpeningType, Project, Room, Side, Underlay, Wall } from '../model/types';
+import { boundingBox, insetPolygon, pointInRect } from '../model/geometry';
+import { createWall } from '../model/factory';
 
 export type SelectionKind = 'room' | 'wall' | 'opening' | 'siteWall' | 'siteOpening' | 'footprint';
 export interface Selection {
@@ -13,6 +15,19 @@ export interface Selection {
 }
 
 const HISTORY_LIMIT = 100;
+
+export interface PlacePlanArgs {
+  floorId: string;
+  name: string;
+  dataUrl: string;
+  /** House size the drawing represents (mm, east–west × north–south). */
+  w: number;
+  d: number;
+  /** Remove the rooms, walls, doors and windows currently inside the house outline on this floor. */
+  clearOld: boolean;
+  /** Wall rectangles detected in the drawing, relative to its north-west corner (mm). */
+  wallRects: { x: number; y: number; w: number; d: number }[];
+}
 
 interface ProjectState {
   project: Project;
@@ -52,6 +67,10 @@ interface ProjectState {
   updateFootprint: (patch: Partial<Footprint>) => void;
   /** Move the house: the outline plus every room and wall inside it, on all floors. */
   moveHouse: (dx: number, dy: number) => void;
+  /** Put an imported plan drawing into the house outline (the plot is never changed). */
+  placeHousePlan: (args: PlacePlanArgs) => void;
+  updateUnderlay: (id: string, patch: Partial<Underlay>) => void;
+  removeUnderlay: (id: string) => void;
 
   addFloor: () => void;
   duplicateFloor: (id: string) => void;
@@ -415,8 +434,71 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           }
         }
       }
+      // Plan drawings inside the outline move with the house.
+      for (const u of d.underlays) {
+        if (pointInRect({ x: u.x + u.w / 2, y: u.y + u.d / 2 }, f, 1)) {
+          u.x = r2(u.x + dx);
+          u.y = r2(u.y + dy);
+        }
+      }
     });
   },
+
+  placeHousePlan: (a) => {
+    const p = get().project;
+    // Where the house goes: keep the existing outline's north-west corner; otherwise centre it in the
+    // buildable area inside the setbacks (or the plot if the setbacks leave too little room).
+    let x: number;
+    let y: number;
+    if (p.footprint) {
+      x = p.footprint.x;
+      y = p.footprint.y;
+    } else {
+      const env = boundingBox(insetPolygon(p.plot.boundary, p.plot.setbacks));
+      const area = env.w >= a.w && env.d >= a.d ? env : boundingBox(p.plot.boundary);
+      x = Math.round(area.x + (area.w - a.w) / 2);
+      y = Math.round(area.y + (area.d - a.d) / 2);
+    }
+    const oldArea = p.footprint ?? { x, y, w: a.w, d: a.d };
+    const inside = houseContents(p, oldArea);
+    const walls: Wall[] = a.wallRects.map((r) => {
+      const horizontal = r.w >= r.d;
+      const t = horizontal ? r.d : r.w;
+      const cx = x + r.x;
+      const cy = y + r.y;
+      const ends = horizontal
+        ? [{ x: cx + Math.min(t / 2, r.w / 2), y: cy + r.d / 2 }, { x: cx + r.w - Math.min(t / 2, r.w / 2), y: cy + r.d / 2 }]
+        : [{ x: cx + r.w / 2, y: cy + Math.min(t / 2, r.d / 2) }, { x: cx + r.w / 2, y: cy + r.d - Math.min(t / 2, r.d / 2) }];
+      const onEdge = r.x < 150 || r.y < 150 || r.x + r.w > a.w - 150 || r.y + r.d > a.d - 150;
+      const w = createWall(ends[0], ends[1], onEdge ? 'exterior' : 'interior', Math.round(t), p.settings.defaultWallHeightMm);
+      return w;
+    });
+    get().commit((d) => {
+      d.footprint = { x, y, w: a.w, d: a.d, locked: d.footprint?.locked ?? false };
+      const floor = d.floors.find((f) => f.id === a.floorId);
+      if (floor && a.clearOld) {
+        floor.rooms = floor.rooms.filter((r) => !inside.rooms.has(r.id));
+        floor.walls = floor.walls.filter((w) => !inside.walls.has(w.id));
+        const wallIds = new Set(floor.walls.map((w) => w.id));
+        floor.openings = floor.openings.filter((o) => wallIds.has(o.wallId));
+      }
+      if (floor) floor.walls.push(...walls);
+      d.underlays = d.underlays.filter((u) => u.floorId !== a.floorId);
+      d.underlays.push({ id: newId(), floorId: a.floorId, name: a.name, dataUrl: a.dataUrl, x, y, w: a.w, d: a.d, opacity: 0.85, showIn3d: true });
+    });
+    set({ selection: null, activeFloorId: a.floorId });
+  },
+
+  updateUnderlay: (id, patch) =>
+    get().commit((d) => {
+      const u = d.underlays.find((x) => x.id === id);
+      if (u) Object.assign(u, patch);
+    }),
+
+  removeUnderlay: (id) =>
+    get().commit((d) => {
+      d.underlays = d.underlays.filter((x) => x.id !== id);
+    }),
 
   addFloor: () => {
     const p = get().project;

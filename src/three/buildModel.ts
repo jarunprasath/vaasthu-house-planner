@@ -162,6 +162,12 @@ export function buildParts(project: Project): Part[] {
     }
   }
 
+  // Plinth under the whole house outline, so walls drawn without rooms still stand on a base.
+  if (project.footprint && sorted.length) {
+    const f = project.footprint;
+    parts.push({ shape: 'box', kind: 'floor', x: M(f.x + f.w / 2), z: M(f.y + f.d / 2), y: M(PLINTH_MM / 2), sx: M(f.w), sy: M(PLINTH_MM - 5), sz: M(f.d), ry: 0, color: '#d6cbb6', floorLevel: sorted[0].level });
+  }
+
   for (const floor of sorted) {
     const base = elev.get(floor.id)!;
     const lvl = floor.level;

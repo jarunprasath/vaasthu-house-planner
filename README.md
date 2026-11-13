@@ -24,6 +24,15 @@ is built and tested; nothing in the app is a placeholder.
 - Live gap to each boundary and the open land left; type a gap to place the house, or centre it.
 - Shown on the PDF site plan and in the area statement; flagged if it leaves the plot or enters a setback.
 
+**Import a house plan drawing**
+- Bring in a picture (PNG, JPG, WebP) or a PDF page of an existing house plan — by file, drag-and-drop,
+  paste, or web address (where the site allows it).
+- The outer walls are found automatically and can be adjusted with crop handles; choose which way north
+  points on the drawing and it is turned north-up; enter the house size it represents.
+- It is placed inside the house outline. The plot, roads, setbacks and site features are never changed;
+  only the old plan inside the outline is replaced (optional). It shows in 2D and on the ground in 3D,
+  moves with the house, and can have walls detected from it automatically (check them).
+
 **Vaasthu guidance** (traditional preferences, advisory only)
 - Editable rule profile per project: for each room type, entrance, sump, overhead tank, septic tank,
   borewell and garden, every zone of a 3×3 grid can be preferred, acceptable, avoided or no preference,
@@ -161,6 +170,9 @@ electrical, plumbing, 4D) add to this model instead of keeping their own copies.
 - The sun position is approximate (for a low-latitude northern site), meant for a feel of morning and
   evening light, not for solar design.
 - The 3D view loads a separate ~250 kB (gzipped) download the first time it is opened.
+- Walls detected from a drawing are approximate: thin or light-coloured walls may be missed, and doors and
+  windows are not detected. Rooms are not read from the drawing; draw them over it for areas and Vaasthu
+  ratings. Text on a drawing that is turned 180° reads upside-down.
 - Setback lines on strongly concave plots should be checked visually.
 - PDF text uses the built-in Helvetica font, so non-Latin room names (for example Tamil) will not print
   correctly yet. Tamil text needs an embedded font and proper text shaping — planned with the Tamil UI.

@@ -83,6 +83,10 @@ export function ToolPanel() {
 
       <Section title="House outline">
         <HouseButton />
+        <Button className="w-full" onClick={() => ui.openDialog('importPlan')} title="Import a plan drawing">
+          <Icon name="export" size={16} /> Import a plan drawing
+        </Button>
+        <p className="text-xs text-muted">Place a picture or PDF of a house plan inside your plot.</p>
       </Section>
 
       <Section title="Add a room">

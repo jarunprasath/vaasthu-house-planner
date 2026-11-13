@@ -8,6 +8,23 @@ import { useProjectStore } from '../store/projectStore';
 import { useUiStore } from '../store/uiStore';
 import { buildParts, type BoxPart, type GablePart, type Part } from './buildModel';
 import { SiteOverlay } from './SiteOverlay';
+import { floorElevations } from './buildModel';
+import type { Underlay } from '../model/types';
+
+function UnderlayPlane({ u, elevationMm }: { u: Underlay; elevationMm: number }) {
+  const tex = useMemo(() => {
+    const t = new THREE.TextureLoader().load(u.dataUrl);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  }, [u.dataUrl]);
+  return (
+    <mesh position={[(u.x + u.w / 2) / 1000, elevationMm / 1000 + 0.004, (u.y + u.d / 2) / 1000]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[u.w / 1000, u.d / 1000]} />
+      <meshStandardMaterial map={tex} transparent opacity={Math.max(0.6, u.opacity)} />
+    </mesh>
+  );
+}
 
 type Preset = 'iso' | 'top' | 'north' | 'east' | 'south' | 'west';
 
@@ -194,6 +211,13 @@ function Scene({
       )}
 
       <SiteOverlay project={project} showLabels={showLabels} />
+      {project.underlays
+        .filter((u) => u.showIn3d)
+        .map((u) => {
+          const f = project.floors.find((x) => x.id === u.floorId);
+          if (!f || f.level > maxLevel) return null;
+          return <UnderlayPlane key={u.id} u={u} elevationMm={floorElevations(project).get(f.id) ?? 0} />;
+        })}
 
       <OrbitControls ref={controls} makeDefault maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={radius * 6} />
     </>

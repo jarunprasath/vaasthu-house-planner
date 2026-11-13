@@ -36,6 +36,7 @@ export function migrateProject(raw: unknown): Project {
     vaasthu: p.vaasthu ? { ...defaultVaasthu(), ...p.vaasthu } : defaultVaasthu(),
     finishes: { ...defaultFinishes(), ...(p.finishes ?? {}) },
     roof: { ...defaultRoof(), ...(p.roof ?? {}) },
+    underlays: p.underlays ?? [],
     schemaVersion: SCHEMA_VERSION,
   };
 }

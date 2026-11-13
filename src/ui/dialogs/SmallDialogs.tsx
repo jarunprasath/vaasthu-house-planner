@@ -77,6 +77,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         <div className="space-y-3 text-sm text-ink-soft">
           <h3 className="font-bold text-ink">Getting started</h3>
           <p>1. Open Plot settings and enter your plot size, roads, neighbours and setbacks.</p>
+          <p>Have a plan drawing already? Use “Import a plan drawing” on the left to place a picture or PDF of it inside your plot.</p>
           <p>2. Pick a room type on the left and drag on the plan. Drag rooms to move them; drag the handles to resize.</p>
           <p>3. Press “Generate walls from rooms” to build walls along the room edges.</p>
           <p>4. Use the Door and Window tools and click on a wall to place them.</p>

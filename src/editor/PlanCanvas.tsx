@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, Group, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
+import { Circle, Group, Image as KImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import { createRoom, createWall } from '../model/factory';
 import {
@@ -9,6 +9,7 @@ import {
   edgeSide,
   insetPolygon,
   normRect,
+  pointInRect,
   projectT,
   snap,
   snapPoint,
@@ -75,6 +76,16 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   };
   const liveFp = fp && houseDrag ? { ...fp, x: fp.x + houseDrag.dx, y: fp.y + houseDrag.dy } : fp;
   const footprintRectRef = useRef<Konva.Rect>(null);
+
+  // Imported plan drawing for this floor
+  const underlay = project.underlays.find((u) => u.floorId === floor.id);
+  const [underlayImg, setUnderlayImg] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (!underlay) return setUnderlayImg(null);
+    const img = new window.Image();
+    img.onload = () => setUnderlayImg(img);
+    img.src = underlay.dataUrl;
+  }, [underlay?.dataUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drafting state
   const [draftRect, setDraftRect] = useState<{ a: Point; b: Point } | null>(null);
@@ -475,6 +486,19 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
         {/* ---------- design layer ---------- */}
         <Layer>
           <Group x={view.x} y={view.y} scaleX={s} scaleY={s}>
+            {/* ---------- imported plan drawing (under everything else on this floor) ---------- */}
+            {underlay && underlayImg && (
+              <KImage
+                image={underlayImg}
+                x={underlay.x + (houseDrag && fp && pointInRect({ x: underlay.x + underlay.w / 2, y: underlay.y + underlay.d / 2 }, fp, 1) ? houseDrag.dx : 0)}
+                y={underlay.y + (houseDrag && fp && pointInRect({ x: underlay.x + underlay.w / 2, y: underlay.y + underlay.d / 2 }, fp, 1) ? houseDrag.dy : 0)}
+                width={underlay.w}
+                height={underlay.d}
+                opacity={underlay.opacity}
+                listening={false}
+              />
+            )}
+
             {/* ---------- house outline ---------- */}
             {liveFp && fp && (
               <Group

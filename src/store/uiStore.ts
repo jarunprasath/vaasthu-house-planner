@@ -33,7 +33,7 @@ interface UiState {
   rightOpen: boolean;
   /** Request the canvas to fit the plot into view (incremented to trigger). */
   fitRequest: number;
-  dialog: null | 'projects' | 'plot' | 'export' | 'help' | 'compound' | 'vaasthuRules' | 'finishes';
+  dialog: null | 'projects' | 'plot' | 'export' | 'help' | 'compound' | 'vaasthuRules' | 'finishes' | 'importPlan';
 
   setTool: (t: Tool) => void;
   setRoomType: (t: RoomType) => void;

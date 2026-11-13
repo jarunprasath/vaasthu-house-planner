@@ -351,6 +351,43 @@ function FootprintProps({ project }: { project: Project }) {
   );
 }
 
+function UnderlaySection({ project }: { project: Project }) {
+  const s = useProjectStore();
+  const openDialog = useUiStore((x) => x.openDialog);
+  const floor = activeFloor(s);
+  const u = project.underlays.find((x) => x.floorId === floor.id);
+  if (!u) return null;
+  return (
+    <Section title="Plan drawing">
+      <img src={u.dataUrl} alt={`${u.name} drawing`} className="max-h-32 border border-line bg-white" />
+      <p className="text-sm text-ink-soft">
+        {u.name}, {formatLength(u.w, project.settings.unit)} × {formatLength(u.d, project.settings.unit)} on {floor.name}
+      </p>
+      <label className="block text-xs text-muted">
+        Visibility on the plan
+        <input
+          type="range"
+          min={0.15}
+          max={1}
+          step={0.05}
+          value={u.opacity}
+          className="mt-1 w-full accent-[var(--ochre)]"
+          onChange={(e) => s.updateUnderlay(u.id, { opacity: Number(e.target.value) })}
+          aria-label="Drawing visibility"
+        />
+      </label>
+      <Check checked={u.showIn3d} onChange={(on) => s.updateUnderlay(u.id, { showIn3d: on })} label="Show in 3D view" />
+      <div className="flex flex-wrap gap-1.5">
+        <Button onClick={() => openDialog('importPlan')}>Replace drawing</Button>
+        <Button variant="danger" onClick={() => s.removeUnderlay(u.id)}>
+          <Icon name="trash" size={15} /> Remove drawing
+        </Button>
+      </div>
+      <p className="text-xs text-muted">Moving the house outline moves the drawing with it. Draw rooms over it to get Vaasthu ratings and areas.</p>
+    </Section>
+  );
+}
+
 function HouseSummary({ project }: { project: Project }) {
   const s = useProjectStore();
   const f = project.footprint;
@@ -521,6 +558,8 @@ function Overview({ project }: { project: Project }) {
       </Section>
 
       <HouseSummary project={project} />
+
+      <UnderlaySection project={project} />
 
       <Section title={`${floor.name} — areas`}>
         <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">

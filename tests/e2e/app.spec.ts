@@ -164,3 +164,44 @@ test('3D view loads without errors', async ({ page }) => {
   await expect(page.locator('main canvas').first()).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('import a plan drawing into the house outline without changing the plot', async ({ page }) => {
+  // Make a simple drawing in the page: a thick frame with an inner wall, plus a thin dimension line.
+  const dataUrl = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 600;
+    c.height = 800;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, 600, 800);
+    g.fillStyle = '#1b0b3a';
+    g.fillRect(100, 100, 400, 14);
+    g.fillRect(100, 650, 400, 14);
+    g.fillRect(100, 100, 14, 564);
+    g.fillRect(486, 100, 14, 564);
+    g.fillRect(290, 114, 14, 300);
+    g.fillRect(100, 60, 400, 1);
+    return c.toDataURL('image/png');
+  });
+  const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
+  const plotBefore = await page.evaluate(() => JSON.stringify((window as any).__vhp.useProjectStore.getState().project.plot));
+
+  await page.getByRole('button', { name: 'Import a plan drawing' }).click();
+  await page.locator('input[type=file][accept*="pdf"]').setInputFiles({ name: 'test-plan.png', mimeType: 'image/png', buffer });
+  await expect(page.getByAltText('Cropped drawing with north up')).toBeVisible();
+  for (const [label, v] of [['Plan width', '29'], ['Plan depth', '41']] as const) {
+    await page.getByRole('textbox', { name: label }).fill(v);
+    await page.getByRole('textbox', { name: label }).press('Enter');
+  }
+  await page.getByRole('button', { name: 'Place in my plot' }).click();
+  await expect(page.getByRole('heading', { name: 'Plan drawing' })).toBeVisible();
+
+  const after = await page.evaluate(() => {
+    const p = (window as any).__vhp.useProjectStore.getState().project;
+    return { plot: JSON.stringify(p.plot), fp: [p.footprint.w, p.footprint.d].map((v: number) => Math.round(v / 304.8)), underlays: p.underlays.length, walls: p.floors[0].walls.length };
+  });
+  expect(after.plot).toBe(plotBefore);
+  expect(after.fp).toEqual([29, 41]);
+  expect(after.underlays).toBe(1);
+  expect(after.walls).toBeGreaterThanOrEqual(4);
+});

@@ -98,6 +98,7 @@ export function createProject(name = 'Untitled house', plot: Plot = createPlot()
     vaasthu: defaultVaasthu(),
     finishes: defaultFinishes(),
     roof: defaultRoof(),
+    underlays: [],
   };
 }
 

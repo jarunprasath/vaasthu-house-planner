@@ -12,6 +12,7 @@ import { ProjectsDialog } from './ui/dialogs/ProjectsDialog';
 import { CompoundDialog, HelpDialog } from './ui/dialogs/SmallDialogs';
 import { VaasthuRulesDialog } from './ui/dialogs/VaasthuRulesDialog';
 import { FinishesDialog } from './ui/dialogs/FinishesDialog';
+import { ImportPlanDialog } from './ui/dialogs/ImportPlanDialog';
 import { PropertiesPanel } from './ui/PropertiesPanel';
 import { ToolPanel, TOOLS } from './ui/ToolPanel';
 import { TopBar } from './ui/TopBar';
@@ -166,6 +167,7 @@ export default function App() {
       {ui.dialog === 'compound' && <CompoundDialog onClose={close} />}
       {ui.dialog === 'vaasthuRules' && <VaasthuRulesDialog onClose={close} />}
       {ui.dialog === 'finishes' && <FinishesDialog onClose={close} />}
+      {ui.dialog === 'importPlan' && <ImportPlanDialog onClose={close} />}
     </div>
   );
 }
