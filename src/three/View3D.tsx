@@ -153,6 +153,7 @@ function Scene({
   const offsetFor = (id?: string) => (drag && id === drag.id ? drag.off : null);
 
   // ---- walking: start outside the main door, facing it ----
+  const box = boundingBox(project.plot.boundary);
   const walkStart = useMemo(() => {
     const ground = [...project.floors].sort((a, b) => a.level - b.level)[0];
     const ent = mainEntrance(project);
@@ -171,7 +172,6 @@ function Scene({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walk]);
 
-  const box = boundingBox(project.plot.boundary);
   const cx = (box.x + box.w / 2) / 1000;
   const cz = (box.y + box.d / 2) / 1000;
   const radius = Math.max(box.w, box.d) / 1000;

@@ -1,7 +1,7 @@
 import { translate } from './i18n';
 import { BathroomDialog, KitchenDialog } from './ui/dialogs/DesignDialogs';
 import { ElevationsDialog } from './ui/dialogs/ElevationsDialog';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import type Konva from 'konva';
 import { PlanCanvas } from './editor/PlanCanvas';
 import { lastProjectId, loadProject } from './storage/db';
@@ -22,6 +22,39 @@ import { TopBar } from './ui/TopBar';
 import { useAutosave } from './useAutosave';
 
 const View3D = lazy(() => import('./three/View3D'));
+
+/** Shows a message instead of a blank screen if the 3D view fails, with the reason and a way back. */
+class View3DBoundary extends Component<{ children: ReactNode; onBack: () => void }, { error: string | null }> {
+  state = { error: null as string | null };
+  static getDerivedStateFromError(e: unknown) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const stale = /dynamically imported module|Failed to fetch|Importing a module script failed/i.test(this.state.error);
+    return (
+      <div className="absolute inset-0 grid place-items-center p-6">
+        <div className="max-w-md space-y-3 rounded-lg border border-line bg-panel p-5 text-sm text-ink">
+          <p className="text-base font-bold">The 3D view could not open</p>
+          <p className="text-ink-soft">
+            {stale
+              ? 'The app was updated while this page was open. Reload the page to get the new version — your plan is saved.'
+              : 'Your plan is safe. Reloading the page usually fixes this; if it keeps happening, please report the message below.'}
+          </p>
+          <p className="break-words rounded bg-ochre-soft px-2 py-1 font-mono text-xs">{this.state.error}</p>
+          <div className="flex gap-2">
+            <button className="rounded-md border border-ink bg-ink px-3 py-1.5 text-panel" onClick={() => location.reload()}>
+              Reload
+            </button>
+            <button className="rounded-md border border-line px-3 py-1.5" onClick={this.props.onBack}>
+              Back to 2D plan
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
 
 export default function App() {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -148,9 +181,11 @@ export default function App() {
         <main className="relative min-w-0 flex-1" aria-label="Plan">
           {ready && ui.viewMode === '2d' && <PlanCanvas stageRef={stageRef} />}
           {ready && ui.viewMode === '3d' && (
-            <Suspense fallback={<p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading 3D view…</p>}>
-              <View3D />
-            </Suspense>
+            <View3DBoundary onBack={() => ui.setViewMode('2d')}>
+              <Suspense fallback={<p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading 3D view…</p>}>
+                <View3D />
+              </Suspense>
+            </View3DBoundary>
           )}
           <div className="no-print absolute left-3 top-3 z-10 flex overflow-hidden rounded-md border border-line bg-panel text-sm shadow-sm" role="group" aria-label="View mode">
             {(['2d', '3d'] as const).map((m) => (

@@ -257,3 +257,23 @@ test('switching to Tamil translates the interface', async ({ page }) => {
   await page.getByRole('button', { name: 'Switch language' }).click();
   await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible();
 });
+
+test('3D view and walk-through open for a plan with no walls, house outline or main door', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.evaluate(() =>
+    ((window as any).__vhp as Hook).useProjectStore.getState().commit((d: any) => {
+      for (const f of d.floors) {
+        f.walls = [];
+        f.openings = [];
+      }
+      d.footprint = null;
+    }),
+  );
+  await page.getByRole('button', { name: '3D view' }).click();
+  await expect(page.getByRole('button', { name: 'Walk through' })).toBeVisible({ timeout: 15000 });
+  await page.getByRole('button', { name: 'Walk through' }).click();
+  await expect(page.getByRole('button', { name: 'Stop walking' })).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(errors).toEqual([]);
+});
