@@ -7,6 +7,7 @@ import { boundingBox, edgeSide, dist } from '../model/geometry';
 import { useProjectStore } from '../store/projectStore';
 import { useUiStore } from '../store/uiStore';
 import { buildParts, type BoxPart, type GablePart, type Part } from './buildModel';
+import { SiteOverlay } from './SiteOverlay';
 
 type Preset = 'iso' | 'top' | 'north' | 'east' | 'south' | 'west';
 
@@ -46,8 +47,10 @@ function Scene({
   preset,
   presetTick,
   showRoof,
+  showLabels,
 }: {
   showRoof: boolean;
+  showLabels: boolean;
   parts: Part[];
   maxLevel: number;
   wallOpacity: number;
@@ -70,7 +73,7 @@ function Scene({
 
   // Camera presets
   useEffect(() => {
-    const r = radius * 1.25;
+    const r = radius * 1.45;
     const pos: Record<Preset, [number, number, number]> = {
       iso: [cx + r * 0.75, r * 0.85, cz + r * 0.95],
       top: [cx, r * 1.7, cz + 0.01],
@@ -190,6 +193,8 @@ function Scene({
         ),
       )}
 
+      <SiteOverlay project={project} showLabels={showLabels} />
+
       <OrbitControls ref={controls} makeDefault maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={radius * 6} />
     </>
   );
@@ -203,6 +208,7 @@ export default function View3D() {
   const [maxLevel, setMaxLevel] = useState(maxAvailable);
   const [wallOpacity, setWallOpacity] = useState(1);
   const [showRoof, setShowRoof] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
   const [hour, setHour] = useState(10);
   const [preset, setPreset] = useState<Preset>('iso');
   const [tick, setTick] = useState(0);
@@ -228,7 +234,7 @@ export default function View3D() {
         gl={{ preserveDrawingBuffer: true, antialias: true }}
         onCreated={({ gl }) => (glRef.current = gl.domElement)}
       >
-        <Scene parts={parts} showRoof={showRoof} maxLevel={maxLevel} wallOpacity={wallOpacity} hour={hour} preset={preset} presetTick={tick} />
+        <Scene parts={parts} showRoof={showRoof} showLabels={showLabels} maxLevel={maxLevel} wallOpacity={wallOpacity} hour={hour} preset={preset} presetTick={tick} />
       </Canvas>
 
       <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-end gap-2">
@@ -270,6 +276,10 @@ export default function View3D() {
           <label className="mt-1 flex items-center gap-1.5">
             <input type="checkbox" className="accent-[var(--ochre)]" checked={!showRoof} onChange={(e) => setShowRoof(!e.target.checked)} />
             Remove roof to look inside
+          </label>
+          <label className="mt-1 flex items-center gap-1.5">
+            <input type="checkbox" className="accent-[var(--ochre)]" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />
+            Site labels and gaps
           </label>
         </div>
         <div className="rounded-md border border-line bg-panel/95 p-2 text-xs shadow-sm">
