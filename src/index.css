@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap');
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Palette drawn from Chettinad houses: lime-wash walls, indigo ink, Athangudi-tile ochre, sage. */
+:root {
+  --paper: #f6f7f4;
+  --panel: #ffffff;
+  --line: #dfe2e8;
+  --ink: #1f2a5a;
+  --ink-soft: #4b5577;
+  --muted: #6d7488;
+  --ochre: #b8860b;
+  --ochre-soft: #f6ead0;
+  --sage: #8fa596;
+  --danger: #b42318;
+  --warn: #9a6700;
+}
+
+.dark {
+  --paper: #121621;
+  --panel: #1a1f2d;
+  --line: #2c3346;
+  --ink: #e4e7f3;
+  --ink-soft: #b5bcd3;
+  --muted: #8e95ab;
+  --ochre: #e2b44c;
+  --ochre-soft: #3a3020;
+  --sage: #6f8576;
+  --danger: #f97066;
+  --warn: #f5c451;
+}
+
+@theme inline {
+  --font-sans: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-ochre: var(--ochre);
+  --color-ochre-soft: var(--ochre-soft);
+  --color-sage: var(--sage);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum';
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ochre);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
