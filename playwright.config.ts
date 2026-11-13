@@ -7,7 +7,11 @@ export default defineConfig({
   timeout: 30_000,
   use: {
     baseURL: 'http://localhost:4173',
-    launchOptions: process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {},
+    // Software WebGL so the 3D view renders in headless CI.
+    launchOptions: {
+      args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
+      ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
+    },
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }, grepInvert: /@phone/ },

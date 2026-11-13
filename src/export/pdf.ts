@@ -8,6 +8,8 @@ import type { Floor, Opening, Point, Project, Wall } from '../model/types';
 
 import { PAPER_MM, SCALES, type PaperSize } from './paper';
 import { clearances, openLandArea } from '../model/footprint';
+import { evaluate } from '../vaasthu/engine';
+import { ZONE_NAMES } from '../vaasthu/rules';
 export { PAPER_MM, SCALES, type PaperSize };
 
 export interface PdfOptions {
@@ -19,6 +21,8 @@ export interface PdfOptions {
   /** Fixed scale denominator, or 0 to pick the largest scale that fits. */
   scale: number;
   preparedBy: string;
+  /** Add the Vaasthu orientation page (defaults to off). */
+  includeVaasthu?: boolean;
 }
 
 const MARGIN = 10;
@@ -574,6 +578,97 @@ export function buildPdf(project: Project, opts: PdfOptions): jsPDF {
 
   if (opts.includeSite) pages.push({ title: 'Site plan', draw: (p, n) => drawPlanPage('Site plan', null, true, p, n) });
   for (const f of floors) pages.push({ title: `${f.name} plan`, draw: (p, n) => drawPlanPage(`${f.name} plan`, f, false, p, n) });
+
+  if (opts.includeVaasthu) {
+    pages.push({ title: 'Vaasthu orientation', draw: (p, n) => drawVaasthuPage(p, n) });
+  }
+
+  function drawVaasthuPage(page: number, total: number) {
+    const report = evaluate(project);
+    const ground = [...project.floors].sort((a, b) => a.level - b.level)[0];
+    frame(doc, paper);
+    const left: Rect = { x: MARGIN + 2, y: MARGIN + 14, w: (paper.w - MARGIN * 2) * 0.5, d: paper.h - MARGIN * 2 - TITLE_H - 22 };
+    const g = report.houseGrid;
+    const pad = 2500;
+    const ext = { x: g.x - pad, y: g.y - pad, w: g.w + pad * 2, d: g.d + pad * 2 };
+    const denom = chooseScale(ext, left.w, left.d);
+    sh.set(ext, left, denom);
+    doc.setTextColor(...INK);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Vaasthu orientation (traditional preferences, advisory only)', MARGIN + 4, MARGIN + 8);
+    doc.setFont('helvetica', 'normal');
+    if (ground) drawFloor(sh, project, ground, false);
+    // 3x3 grid
+    const OCHRE: [number, number, number] = [184, 134, 11];
+    doc.setDrawColor(...OCHRE);
+    doc.setLineWidth(0.3);
+    doc.setLineDashPattern([2, 1.2], 0);
+    for (const k of [1, 2]) {
+      sh.line({ x: g.x + (g.w * k) / 3, y: g.y }, { x: g.x + (g.w * k) / 3, y: g.y + g.d });
+      sh.line({ x: g.x, y: g.y + (g.d * k) / 3 }, { x: g.x + g.w, y: g.y + (g.d * k) / 3 });
+    }
+    doc.setLineDashPattern([], 0);
+    doc.rect(sh.X(g.x), sh.Y(g.y), g.w / denom, g.d / denom, 'S');
+    doc.setFontSize(8);
+    doc.setTextColor(...OCHRE);
+    doc.setFont('helvetica', 'bold');
+    const grid = [['NW', 'N', 'NE'], ['W', 'C', 'E'], ['SW', 'S', 'SE']];
+    grid.forEach((row, r) => row.forEach((z, c) => doc.text(z === 'C' ? 'CENTRE' : z, sh.X(g.x + (g.w * c) / 3) + 1.2, sh.Y(g.y + (g.d * r) / 3) + 3.5)));
+    doc.setFont('helvetica', 'normal');
+    northArrow(doc, left.x + left.w - 10, left.y + 10);
+
+    // Table
+    const tx = MARGIN + 6 + left.w + 6;
+    let ty = MARGIN + 16;
+    doc.setTextColor(...INK);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Advisory score: ${report.score ?? '-'} / 100`, tx, ty);
+    doc.setFont('helvetica', 'normal');
+    ty += 6;
+    const RATE: Record<string, [number, number, number]> = { preferred: [47, 133, 90], acceptable: [183, 121, 31], neutral: [138, 143, 156], avoid: [197, 48, 48] };
+    const LABEL: Record<string, string> = { preferred: 'Preferred', acceptable: 'Acceptable', neutral: 'No preference', avoid: 'Avoided' };
+    doc.setFontSize(7);
+    doc.setTextColor(...GREY);
+    doc.text('Element', tx, ty);
+    doc.text('Zone', tx + 62, ty);
+    doc.text('Rating', tx + 92, ty);
+    doc.text('Traditionally best', tx + 116, ty);
+    ty += 4.5;
+    const maxY = paper.h - MARGIN - TITLE_H - 22;
+    for (const it of report.items) {
+      if (ty > maxY) {
+        doc.setTextColor(...GREY);
+        doc.text(`…and ${report.items.length - report.items.indexOf(it)} more (see the app)`, tx, ty);
+        break;
+      }
+      doc.setTextColor(...INK);
+      doc.text(doc.splitTextToSize(it.name, 60)[0], tx, ty);
+      doc.text(ZONE_NAMES[it.zone].en, tx + 62, ty);
+      doc.setTextColor(...RATE[it.rating]);
+      doc.text(LABEL[it.rating], tx + 92, ty);
+      doc.setTextColor(...GREY);
+      doc.text(doc.splitTextToSize(it.preferredZones.map((z) => ZONE_NAMES[z].en).join(', ') || '-', 60)[0], tx + 116, ty);
+      ty += 4.2;
+    }
+    if (report.centreIssues.length) {
+      ty += 2;
+      doc.setTextColor(...RATE.avoid);
+      doc.text(`On the centre (Brahmasthan): ${report.centreIssues.map((c) => c.name).join(', ')}`, tx, ty);
+      ty += 4.2;
+    }
+    ty += 3;
+    doc.setFontSize(6.3);
+    doc.setTextColor(...GREY);
+    const note = doc.splitTextToSize(
+      'These are commonly cited traditional directional preferences, configurable per project. They are not structural, health or legal requirements and never override building regulations, structural safety, ventilation, sanitation or setbacks. Zones are a 3x3 grid over the house outline; sump, septic tank, borewell and garden use the plot grid.' +
+        (report.entrance?.guessed ? ' No door was marked as the main entrance, so one was assumed.' : ''),
+      paper.w - tx - MARGIN - 4,
+    );
+    doc.text(note, tx, Math.min(ty, maxY + 6));
+    titleBlock(doc, paper, project, opts, 'Vaasthu orientation', `1:${denom} on ${opts.paper.toUpperCase()}`, page, total);
+  }
 
   if (opts.includeSchedule) {
     const rows = scheduleRows(project);

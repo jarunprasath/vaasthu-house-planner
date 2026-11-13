@@ -26,6 +26,12 @@ describe('pdf export', () => {
     expect(text).toContain('1:100 on A3');
   });
 
+  it('adds the Vaasthu orientation page when asked', () => {
+    const doc = buildPdf(p, { ...base, paper: 'a3', floorIds: [], includeSite: false, includeSchedule: false, includeVaasthu: true });
+    expect(doc.getNumberOfPages()).toBe(1);
+    expect(doc.output()).toContain('Advisory score');
+  });
+
   it('refuses an empty selection with a clear message', () => {
     expect(() => buildPdf(p, { ...base, paper: 'a4', includeSite: false, includeSchedule: false, floorIds: [] })).toThrow(
       'Choose at least one page',

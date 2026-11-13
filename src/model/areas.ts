@@ -34,7 +34,7 @@ export function unionArea(rects: Rect[]): number {
 
 const SEPARATE_TYPES: RoomType[] = ['portico', 'staircase'];
 /** Areas that do not count towards ground coverage (open to sky / landscaping). */
-export const NON_COVERAGE_TYPES: RoomType[] = ['garden', 'pathway', 'courtyard', 'parking', 'terrace'];
+export const NON_COVERAGE_TYPES: RoomType[] = ['garden', 'pathway', 'courtyard', 'parking', 'terrace', 'sump', 'septic_tank', 'borewell'];
 
 export function isEnclosed(r: Room): boolean {
   return !OUTDOOR_ROOM_TYPES.includes(r.type) && !SEPARATE_TYPES.includes(r.type);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type Konva from 'konva';
 import { PlanCanvas } from './editor/PlanCanvas';
 import { lastProjectId, loadProject } from './storage/db';
@@ -10,10 +10,14 @@ import { ExportDialog } from './ui/dialogs/ExportDialog';
 import { PlotDialog } from './ui/dialogs/PlotDialog';
 import { ProjectsDialog } from './ui/dialogs/ProjectsDialog';
 import { CompoundDialog, HelpDialog } from './ui/dialogs/SmallDialogs';
+import { VaasthuRulesDialog } from './ui/dialogs/VaasthuRulesDialog';
+import { FinishesDialog } from './ui/dialogs/FinishesDialog';
 import { PropertiesPanel } from './ui/PropertiesPanel';
 import { ToolPanel, TOOLS } from './ui/ToolPanel';
 import { TopBar } from './ui/TopBar';
 import { useAutosave } from './useAutosave';
+
+const View3D = lazy(() => import('./three/View3D'));
 
 export default function App() {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -120,7 +124,24 @@ export default function App() {
           <ToolPanel />
         </aside>
         <main className="relative min-w-0 flex-1" aria-label="Plan">
-          {ready && <PlanCanvas stageRef={stageRef} />}
+          {ready && ui.viewMode === '2d' && <PlanCanvas stageRef={stageRef} />}
+          {ready && ui.viewMode === '3d' && (
+            <Suspense fallback={<p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading 3D view…</p>}>
+              <View3D />
+            </Suspense>
+          )}
+          <div className="no-print absolute left-3 top-3 z-10 flex overflow-hidden rounded-md border border-line bg-panel text-sm shadow-sm" role="group" aria-label="View mode">
+            {(['2d', '3d'] as const).map((m) => (
+              <button
+                key={m}
+                aria-pressed={ui.viewMode === m}
+                onClick={() => ui.setViewMode(m)}
+                className={`px-3 py-1.5 ${ui.viewMode === m ? 'bg-ink text-panel' : 'text-ink-soft hover:bg-ochre-soft'}`}
+              >
+                {m === '2d' ? '2D plan' : '3D view'}
+              </button>
+            ))}
+          </div>
           {notice && (
             <div role="status" className="absolute bottom-3 left-1/2 z-10 max-w-md -translate-x-1/2 rounded-md border border-line bg-panel px-4 py-2 text-sm shadow-md">
               {notice}
@@ -143,6 +164,8 @@ export default function App() {
       {ui.dialog === 'export' && <ExportDialog onClose={close} stageRef={stageRef} />}
       {ui.dialog === 'help' && <HelpDialog onClose={close} />}
       {ui.dialog === 'compound' && <CompoundDialog onClose={close} />}
+      {ui.dialog === 'vaasthuRules' && <VaasthuRulesDialog onClose={close} />}
+      {ui.dialog === 'finishes' && <FinishesDialog onClose={close} />}
     </div>
   );
 }

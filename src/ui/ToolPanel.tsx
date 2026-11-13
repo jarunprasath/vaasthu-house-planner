@@ -48,6 +48,7 @@ const ROOM_GROUPS: { title: string; types: RoomType[] }[] = [
   { title: 'Service', types: ['kitchen', 'store', 'utility', 'bathroom', 'toilet', 'pooja'] },
   { title: 'Outside & circulation', types: ['portico', 'staircase', 'sitout', 'balcony', 'terrace', 'courtyard'] },
   { title: 'Site', types: ['parking', 'garden', 'pathway', 'other'] },
+  { title: 'Water & drainage', types: ['sump', 'overhead_tank', 'septic_tank', 'borewell'] },
 ];
 
 export function ToolPanel() {
@@ -126,11 +127,18 @@ export function ToolPanel() {
         </Button>
       </Section>
 
+      <Section title="Paint, floors & roof">
+        <Button onClick={() => ui.openDialog('finishes')} className="w-full" title="Choose paint, floors & roof">
+          Choose paint, floors & roof
+        </Button>
+      </Section>
+
       <Section title="Show">
         <Check checked={ui.showGrid} onChange={() => ui.toggle('showGrid')} label="Grid" />
         <Check checked={ui.showDimensions} onChange={() => ui.toggle('showDimensions')} label="Dimensions" />
         <Check checked={ui.showSetbacks} onChange={() => ui.toggle('showSetbacks')} label="Setback line" />
-        <Check checked={ui.showZones} onChange={() => ui.toggle('showZones')} label="Direction zones (3×3)" />
+        <Check checked={ui.showZones} onChange={() => ui.toggle('showZones')} label="Vaasthu grid and ratings" />
+        <Check checked={ui.showSixteen} onChange={() => ui.toggle('showSixteen')} label="16 directions" />
         <Check checked={ui.showFloorBelow} onChange={() => ui.toggle('showFloorBelow')} label="Floor below (faint)" />
       </Section>
     </div>

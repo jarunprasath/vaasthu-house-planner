@@ -68,6 +68,10 @@ export type RoomType =
   | 'parking'
   | 'garden'
   | 'pathway'
+  | 'sump'
+  | 'septic_tank'
+  | 'overhead_tank'
+  | 'borewell'
   | 'other';
 
 export interface Room {
@@ -84,6 +88,8 @@ export interface Room {
   locked: boolean;
   /** For staircases: the direction a person walks UP the flight. */
   stairUp?: Side;
+  /** Floor finish id (see finishes.ts); falls back to the project default. */
+  floorFinish?: string;
 }
 
 export type WallKind = 'exterior' | 'interior' | 'compound';
@@ -116,6 +122,8 @@ export interface Opening {
   swing: 'left' | 'right';
   label: string;
   locked: boolean;
+  /** The house's main entrance door (used by the Vaasthu checks). */
+  isMain?: boolean;
 }
 
 export interface Floor {
@@ -158,6 +166,50 @@ export interface Project {
    * It can be sized and moved independently; moving it carries the rooms and walls inside it.
    */
   footprint: Footprint | null;
+  vaasthu: VaasthuSettings;
+  finishes: Finishes;
+  roof: RoofSettings;
+}
+
+export type ZoneRating = 'preferred' | 'acceptable' | 'avoid' | 'neutral';
+export type ZoneId = 'NW' | 'N' | 'NE' | 'W' | 'C' | 'E' | 'SW' | 'S' | 'SE';
+
+export interface VaasthuRule {
+  /** What the rule applies to: a room type, or 'entrance'. */
+  target: RoomType | 'entrance';
+  enabled: boolean;
+  /** Relative importance (1–3) in the advisory score. */
+  weight: number;
+  zones: Record<ZoneId, ZoneRating>;
+}
+
+export interface VaasthuSettings {
+  /** Rules can be edited per project; defaults come from vaasthu/rules.ts. */
+  rules: VaasthuRule[];
+  /** Keep the centre (Brahmasthan) free of toilets, stairs, kitchen and heavy storage. */
+  keepCentreOpen: boolean;
+}
+
+export interface Finishes {
+  exteriorWall: string;
+  interiorWall: string;
+  roof: string;
+  /** Default floor finish id for rooms without their own. */
+  floor: string;
+  /** Saved named themes. */
+  themes: { name: string; exteriorWall: string; interiorWall: string; roof: string; floor: string }[];
+}
+
+export type RoofType = 'flat' | 'gable';
+export interface RoofSettings {
+  type: RoofType;
+  /** Parapet height above the roof slab for flat roofs (0 = none). */
+  parapetMm: number;
+  slabMm: number;
+  /** Gable roof pitch in degrees. */
+  pitchDeg: number;
+  /** Gable ridge runs east–west or north–south. */
+  ridge: 'EW' | 'NS';
 }
 
 export interface Footprint {
@@ -180,6 +232,10 @@ export const OUTDOOR_ROOM_TYPES: RoomType[] = [
   'parking',
   'garden',
   'pathway',
+  'sump',
+  'septic_tank',
+  'overhead_tank',
+  'borewell',
 ];
 
 export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
@@ -205,6 +261,10 @@ export const ROOM_TYPE_LABELS: Record<RoomType, string> = {
   parking: 'Parking',
   garden: 'Garden',
   pathway: 'Pathway',
+  sump: 'Underground sump',
+  septic_tank: 'Septic tank',
+  overhead_tank: 'Overhead tank',
+  borewell: 'Borewell',
   other: 'Other',
 };
 
@@ -240,5 +300,9 @@ export const ROOM_COLORS: Record<RoomType, string> = {
   parking: '#e1e1e1',
   garden: '#cfe8c4',
   pathway: '#ebe5dc',
+  sump: '#bfe0ee',
+  septic_tank: '#d9cfc2',
+  overhead_tank: '#a9d3ec',
+  borewell: '#9cc6e0',
   other: '#f0f0f0',
 };

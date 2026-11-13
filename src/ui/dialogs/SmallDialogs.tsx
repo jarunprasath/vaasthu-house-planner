@@ -81,15 +81,16 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <p>3. Press “Generate walls from rooms” to build walls along the room edges.</p>
           <p>4. Use the Door and Window tools and click on a wall to place them.</p>
           <p>5. Check the list on the right for overlaps, setback problems and rooms without doors or windows.</p>
-          <p>6. Export a PDF drawing set to print.</p>
+          <p>6. Open the Vaasthu tab on the right for the traditional-preference checklist, and switch to 3D view at the top left of the plan.</p>
+          <p>7. Export a PDF drawing set to print.</p>
           <p>
             Lengths can be typed as 12'6", 12 ft 6 in, 12.5, 3.8m or 380cm. Plans are drawn with north at the top.
           </p>
           <h3 className="pt-2 font-bold text-ink">Not built yet</h3>
           <p>
-            Vaasthu recommendations and scoring, 3D view, Tamil language, materials and paint, kitchen and bathroom
-            designers, electrical, plumbing and drainage layers, cost estimates, the AI assistant and the 4D construction
-            timeline are planned for later phases. They are not shown as buttons until they work.
+            A first-person walkthrough, editing in 3D, a full Tamil interface, kitchen and bathroom designers,
+            electrical, plumbing and drainage layers, cost estimates, the AI assistant and the 4D construction timeline
+            are planned for later phases. They are not shown as buttons until they work.
           </p>
           <p className="text-xs text-muted">
             Drawings from this app are preliminary. Structural, electrical and plumbing design, and building approval,

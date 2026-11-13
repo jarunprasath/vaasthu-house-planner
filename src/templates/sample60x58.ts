@@ -58,12 +58,15 @@ export function createSampleProject(): Project {
     roomFt('pathway', 40, 6, 20, 4, 'Walkway from east gate'),
     roomFt('pathway', 40, 10, 4, 5, 'Walkway to main door'),
     roomFt('pathway', 0, 17, 7, 12, 'Driveway from west gate'),
+    // Water and sanitation (open, below ground)
+    roomFt('sump', 46, 11, 4, 3, 'Sump'),
+    roomFt('septic_tank', 1, 2, 5, 6, 'Septic tank'),
   ];
   g.walls = buildWallsFromRooms(g.rooms, project.settings);
   const W = g.walls;
   g.openings = [
     // Doors
-    openingAtFt(W, 'door', 41, 15, 3.5, 'MD (main door)'),
+    openingAtFt(W, 'door', 41, 15, 3.5, 'MD (main door)', { isMain: true }),
     openingAtFt(W, 'door', 38, 18, 3, 'D1'),
     openingAtFt(W, 'door', 41, 21, 3, 'D2'),
     openingAtFt(W, 'door', 44, 18, 2.5, 'D3'),
@@ -100,6 +103,7 @@ export function createSampleProject(): Project {
     roomFt('terrace', 7, 15, 12, 33, 'Roof terrace (west)'),
     { ...roomFt('staircase', 19, 15, 4, 16, 'Stair arrival'), stairUp: 'S' },
     roomFt('terrace', 19, 31, 4, 17, 'Roof terrace (strip)'),
+    roomFt('overhead_tank', 9, 41, 5, 5, 'Overhead tank'),
   ];
 
   project.floors = [g, roof];

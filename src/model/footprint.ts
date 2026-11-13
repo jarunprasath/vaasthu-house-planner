@@ -2,7 +2,7 @@ import { boundingBox, insetPolygon, pointInPolygon, pointInRect, polygonArea, ty
 import type { Footprint, Point, Project, RoomType, Side } from './types';
 
 /** Open site elements that never move with the house. */
-export const SITE_ROOM_TYPES: RoomType[] = ['garden', 'pathway', 'parking'];
+export const SITE_ROOM_TYPES: RoomType[] = ['garden', 'pathway', 'parking', 'sump', 'septic_tank', 'borewell'];
 
 export interface Clearance {
   side: Side;

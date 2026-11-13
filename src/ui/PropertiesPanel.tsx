@@ -8,7 +8,12 @@ import { ROOM_TYPE_LABELS, WALL_MATERIAL_LABELS } from '../model/types';
 import type { Opening, Project, Room, RoomType, Side, Wall, WallKind, WallMaterial } from '../model/types';
 import { activeFloor, useProjectStore } from '../store/projectStore';
 import { validateProject, type Issue } from '../validation/validate';
-import { Button, Field, LengthInput, Section, Select, TextInput } from './fields';
+import { Button, Check, Field, LengthInput, Section, Select, TextInput } from './fields';
+import { useUiStore } from '../store/uiStore';
+import { evaluate } from '../vaasthu/engine';
+import { ZONE_NAMES } from '../vaasthu/rules';
+import { VaasthuPanel } from './VaasthuPanel';
+import { FLOOR_FINISHES, floorFinish } from '../model/finishes';
 import { Icon } from './icons';
 
 export function PropertiesPanel() {
@@ -34,7 +39,35 @@ export function PropertiesPanel() {
     if (o && w) body = <OpeningProps opening={o} wall={w} site={site} project={project} />;
   }
 
-  return <div className="flex h-full flex-col overflow-y-auto">{body ?? <Overview project={project} />}</div>;
+  return <div className="flex h-full flex-col overflow-y-auto">{body ?? <Tabs project={project} />}</div>;
+}
+
+function Tabs({ project }: { project: Project }) {
+  const tab = useUiStore((s) => s.panelTab);
+  const setTab = useUiStore((s) => s.setPanelTab);
+  return (
+    <>
+      <div className="sticky top-0 z-10 flex border-b border-line bg-panel" role="tablist">
+        {(
+          [
+            ['overview', 'Overview & checks'],
+            ['vaasthu', 'Vaasthu'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`flex-1 px-3 py-2.5 text-sm ${tab === id ? 'border-b-2 border-ochre font-bold text-ink' : 'text-ink-soft'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'vaasthu' ? <VaasthuPanel /> : <Overview project={project} />}
+    </>
+  );
 }
 
 function ElementActions({ locked, rotate }: { locked: boolean; rotate?: boolean }) {
@@ -65,6 +98,32 @@ function BackLink() {
     <button className="px-4 pt-3 text-left text-sm text-ink-soft underline-offset-2 hover:underline" onClick={() => select(null)}>
       ← Overview & checks
     </button>
+  );
+}
+
+function RoomVaasthu({ room, project }: { room: Room; project: Project }) {
+  const lang = useUiStore((s) => s.lang);
+  const report = useMemo(() => evaluate(project), [project]);
+  const item = report.items.find((i) => i.elementId === room.id);
+  const inCentre = report.centreIssues.some((c) => c.elementId === room.id);
+  if (!item && !inCentre) return null;
+  const tone = item?.rating === 'preferred' ? 'text-[#2f855a]' : item?.rating === 'avoid' ? 'text-danger' : 'text-warn';
+  return (
+    <div className="rounded-md border border-line p-2 text-sm">
+      {item && (
+        <p>
+          <span className="text-muted">Vaasthu: </span>
+          <span className={`font-bold ${tone}`}>
+            {{ preferred: 'preferred position', acceptable: 'acceptable position', neutral: 'no stated preference here', avoid: 'traditionally avoided here' }[item.rating]}
+          </span>{' '}
+          ({ZONE_NAMES[item.zone][lang]})
+        </p>
+      )}
+      {item && item.rating !== 'preferred' && item.preferredZones.length > 0 && (
+        <p className="text-xs text-ink-soft">Best: {item.preferredZones.map((z) => ZONE_NAMES[z][lang]).join(', ')}</p>
+      )}
+      {inCentre && <p className="text-xs text-danger">Sits on the centre of the house (Brahmasthan).</p>}
+    </div>
   );
 }
 
@@ -109,15 +168,27 @@ function RoomProps({ room, project }: { room: Room; project: Project }) {
             />
           </Field>
         )}
+        {!['garden', 'pathway', 'parking', 'sump', 'septic_tank', 'borewell', 'overhead_tank', 'staircase'].includes(room.type) && (
+          <Field label="Floor finish">
+            <Select
+              value={room.floorFinish ?? ''}
+              disabled={dis}
+              options={[
+                { value: '', label: `Project default (${floorFinish(project.finishes.floor).label})` },
+                ...FLOOR_FINISHES.map((f) => ({ value: f.id, label: f.label })),
+              ]}
+              onChange={(v) => update(room.id, { floorFinish: v || undefined })}
+              ariaLabel="Floor finish"
+            />
+          </Field>
+        )}
         <dl className="grid grid-cols-2 gap-y-1 text-sm">
           <dt className="text-muted">Area (to centre-lines)</dt>
           <dd className="text-right">{formatArea(room.w * room.d, unit)}</dd>
           <dt className="text-muted">Position on plot</dt>
           <dd className="text-right">{ZONE_LABELS[zone]}</dd>
         </dl>
-        <p className="text-xs text-muted">
-          Position is the 3×3 zone of the plot that holds the room’s centre. Vaasthu recommendations come in Phase 2.
-        </p>
+        <RoomVaasthu room={room} project={project} />
         <ElementActions locked={room.locked} rotate />
       </Section>
     </>
@@ -333,6 +404,7 @@ function HouseSummary({ project }: { project: Project }) {
 }
 
 function OpeningProps({ opening, wall, site, project }: { opening: Opening; wall: Wall; site: boolean; project: Project }) {
+  const s2 = useProjectStore();
   const update = useProjectStore((s) => s.updateOpening);
   const unit = project.settings.unit;
   const dis = opening.locked;
@@ -362,6 +434,17 @@ function OpeningProps({ opening, wall, site, project }: { opening: Opening; wall
             <LengthInput valueMm={opening.offsetMm} unit={unit} disabled={dis} onCommit={(offsetMm) => u({ offsetMm: Math.min(offsetMm, len) })} />
           </Field>
         </div>
+        {opening.type === 'door' && !site && (
+          <Check
+            checked={!!opening.isMain}
+            label="Main entrance (used by the Vaasthu checks)"
+            onChange={(on) =>
+              s2.commit((d) => {
+                for (const f of d.floors) for (const o of f.openings) o.isMain = on && o.id === opening.id ? true : undefined;
+              })
+            }
+          />
+        )}
         {opening.type === 'door' && (
           <div className="flex flex-wrap gap-1.5">
             <Button disabled={dis} onClick={() => u({ hinge: opening.hinge === 'start' ? 'end' : 'start' })}>

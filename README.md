@@ -3,9 +3,8 @@
 A browser-based house planner for homeowners in India and elsewhere: set up your plot, draw rooms, add
 doors and windows, check the plan, and print a dimensioned drawing set.
 
-This is **Phase 1 — the functional foundation** of a larger plan (Vaasthu guidance, 3D, interiors,
-engineering layers, AI assistant and 4D construction come later — see
-[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)). Everything listed under “What works” below
+Phases 1 and 2 are built: the plan editor, Vaasthu guidance and a 3D view. Interiors, engineering layers,
+the AI assistant and 4D construction come later — see [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md). Everything listed under “What works” below
 is built and tested; nothing in the app is a placeholder.
 
 > Drawings produced by this app are **preliminary and not for construction**. Structural, electrical and
@@ -24,6 +23,31 @@ is built and tested; nothing in the app is a placeholder.
   every floor. Arrow keys nudge it.
 - Live gap to each boundary and the open land left; type a gap to place the house, or centre it.
 - Shown on the PDF site plan and in the area statement; flagged if it leaves the plot or enters a setback.
+
+**Vaasthu guidance** (traditional preferences, advisory only)
+- Editable rule profile per project: for each room type, entrance, sump, overhead tank, septic tank,
+  borewell and garden, every zone of a 3×3 grid can be preferred, acceptable, avoided or no preference,
+  with a weight. Defaults are commonly cited preferences; practitioners differ, so change them freely.
+- Judged on the house outline’s grid (site features on the plot’s grid); keeps the centre (Brahmasthan)
+  free of toilets, stairs, kitchen and heavy storage.
+- Advisory score, checklist with explanations in English and Tamil, rating markers on the plan,
+  optional 16-direction overlay, and a main-entrance marker on doors.
+- Alternative placements: swaps of similar-sized rooms that raise the score, one at a time or as a
+  suggested layout — previewed first, applied only on confirmation, and undoable.
+- Vaasthu orientation page in the PDF.
+- Vaasthu output is kept separate from the regulation and safety checks and never overrides them.
+
+**3D view**
+- Built from the same walls, doors, windows and rooms as the plan: wall openings, plinth, floor finishes,
+  slabs, flat roof with parapet or a gable roof, stairs, overhead tank, compound wall and gates, roads.
+- Orbit, pan and zoom; preset views; show floors up to a level; remove the roof to look inside;
+  see-through walls; approximate sun position by time of day with shadows; click a part to select it;
+  save an image.
+
+**Paint, floors and roof**
+- Exterior and interior wall colours, roof colour, default and per-room floor finishes, roof type,
+  parapet height, pitch and ridge direction; saved colour themes. Colours are flat on-screen
+  approximations, not supplier matches.
 
 **2D plan editor**
 - Draw rooms by dragging; move, resize, rotate 90°, duplicate, lock, delete.
@@ -65,8 +89,8 @@ is built and tested; nothing in the app is a placeholder.
 
 ## Not built yet
 
-Vaasthu rules, recommendations and scoring; 3D and walkthroughs; Tamil language; paint, tiles and
-materials; kitchen, bathroom and furniture designers; elevations; electrical, plumbing and drainage
+First-person walkthrough and editing in 3D; textures; full Tamil interface (Vaasthu explanations are in
+Tamil already); Tamil text in PDFs; kitchen, bathroom and furniture designers; elevations; electrical, plumbing and drainage
 layers; cost estimates; AI assistant; 4D construction timeline; DXF / GLB / IFC export; cloud accounts;
 offline (PWA) install. Building-regulation presets are deliberately not included until they can be
 taken from current official rules — enter your authority’s setbacks and limits yourself.
@@ -132,6 +156,11 @@ electrical, plumbing, 4D) add to this model instead of keeping their own copies.
 
 **Known limitations**
 - Rooms are rectangles; irregular rooms can be made from several rectangles for now.
+- A room’s Vaasthu zone is the 3×3 cell holding its centre; large rooms that span several zones are
+  judged by that one cell.
+- The sun position is approximate (for a low-latitude northern site), meant for a feel of morning and
+  evening light, not for solar design.
+- The 3D view loads a separate ~250 kB (gzipped) download the first time it is opened.
 - Setback lines on strongly concave plots should be checked visually.
 - PDF text uses the built-in Helvetica font, so non-Latin room names (for example Tamil) will not print
   correctly yet. Tamil text needs an embedded font and proper text shaping — planned with the Tamil UI.

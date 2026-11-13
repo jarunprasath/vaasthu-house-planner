@@ -7,8 +7,8 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
   plugins: [react(), tailwindcss()],
-  // Konva + React are ~650 kB minified; the PDF code is split into its own lazily loaded chunk.
-  build: { chunkSizeWarningLimit: 800 },
+  // Konva + React are ~700 kB minified. PDF (jsPDF) and 3D (three.js) are split into lazily loaded chunks.
+  build: { chunkSizeWarningLimit: 1000 },
   test: {
     environment: 'node',
     include: ['tests/unit/**/*.test.ts'],

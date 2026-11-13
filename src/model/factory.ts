@@ -1,7 +1,9 @@
 import { nanoid } from 'nanoid';
 import { ft } from './units';
 import { ROOM_TYPE_LABELS, SCHEMA_VERSION } from './types';
+import { defaultRules } from '../vaasthu/rules';
 import type {
+  Finishes,
   Floor,
   Opening,
   OpeningType,
@@ -9,6 +11,8 @@ import type {
   Point,
   Project,
   ProjectSettings,
+  RoofSettings,
+  VaasthuSettings,
   Room,
   RoomType,
   Side,
@@ -26,6 +30,19 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   defaultInteriorWallMm: 4.5 * 25.4,
   defaultWallHeightMm: ft(10),
 };
+
+export function defaultVaasthu(): VaasthuSettings {
+  return { rules: defaultRules(), keepCentreOpen: true };
+}
+
+export function defaultFinishes(): Finishes {
+  return { exteriorWall: '#eee0bf', interiorWall: '#f3f4ee', roof: '#9b9b97', floor: 'vitrified_ivory', themes: [] };
+}
+
+export function defaultRoof(): RoofSettings {
+  // 3'-0" parapet and a 5" (127 mm) slab are common; both editable.
+  return { type: 'flat', parapetMm: ft(3), slabMm: 127, pitchDeg: 25, ridge: 'EW' };
+}
 
 export function rectangularBoundary(widthMm: number, depthMm: number): Point[] {
   return [
@@ -78,6 +95,9 @@ export function createProject(name = 'Untitled house', plot: Plot = createPlot()
     siteWalls: [],
     siteOpenings: [],
     footprint: null,
+    vaasthu: defaultVaasthu(),
+    finishes: defaultFinishes(),
+    roof: defaultRoof(),
   };
 }
 

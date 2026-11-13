@@ -18,6 +18,10 @@ import {
 import { formatLength, gridStepMm } from '../model/units';
 import type { Point, Wall } from '../model/types';
 import { clearances, houseContents } from '../model/footprint';
+import { evaluate } from '../vaasthu/engine';
+
+const SIXTEEN = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+const RATING_COLOR = { preferred: '#2f855a', acceptable: '#b7791f', neutral: '#8a8f9c', avoid: '#c53030' } as const;
 import { activeFloor, useProjectStore } from '../store/projectStore';
 import { useCursorStore } from '../store/cursorStore';
 import { useUiStore } from '../store/uiStore';
@@ -342,6 +346,9 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
     return pts.length ? boundingBox(pts) : null;
   }, [floor.walls]);
 
+  const vaasthu = useMemo(() => (ui.showZones || ui.showSixteen ? evaluate(project) : null), [project, ui.showZones, ui.showSixteen]);
+  const vg = vaasthu?.houseGrid ?? box;
+
   const s = view.scale;
   const fsLabel = px(12, s);
 
@@ -418,31 +425,6 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
             {gridLines.map((g, i) => (
               <Line key={i} points={g.pts} stroke={g.major ? palette.gridMajor : palette.grid} strokeWidth={g.major ? 1 : 0.6} strokeScaleEnabled={false} />
             ))}
-
-            {ui.showZones && (
-              <Group>
-                {[1, 2].map((k) => (
-                  <Group key={k}>
-                    <Line points={[box.x + (box.w * k) / 3, box.y, box.x + (box.w * k) / 3, box.y + box.d]} stroke={palette.zone} strokeWidth={1} strokeScaleEnabled={false} dash={[8, 6]} opacity={0.7} />
-                    <Line points={[box.x, box.y + (box.d * k) / 3, box.x + box.w, box.y + (box.d * k) / 3]} stroke={palette.zone} strokeWidth={1} strokeScaleEnabled={false} dash={[8, 6]} opacity={0.7} />
-                  </Group>
-                ))}
-                {ZONE_GRID.flatMap((row, r) =>
-                  row.map((z, c) => (
-                    <Text
-                      key={z}
-                      text={z === 'C' ? 'Centre' : z}
-                      x={box.x + (box.w * c) / 3 + px(6, s)}
-                      y={box.y + (box.d * r) / 3 + px(5, s)}
-                      fontSize={px(13, s)}
-                      fontStyle="bold"
-                      fill={palette.zone}
-                      opacity={0.85}
-                    />
-                  )),
-                )}
-              </Group>
-            )}
 
             {ui.showSetbacks && inset.length >= 3 && (
               <Line points={flat(inset)} closed stroke={palette.setback} strokeWidth={1.5} strokeScaleEnabled={false} dash={[10, 6]} />
@@ -754,6 +736,38 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
               </>
             )}
 
+            {/* Vaasthu rating markers on the active floor */}
+            {ui.showZones &&
+              vaasthu?.items
+                .filter((i) => i.floorId === floor.id)
+                .map((i) => {
+                  const r = i.elementKind === 'room' ? floor.rooms.find((x) => x.id === i.elementId) : null;
+                  const o = i.elementKind === 'opening' ? floor.openings.find((x) => x.id === i.elementId) : null;
+                  const w = o ? floor.walls.find((x) => x.id === o.wallId) : null;
+                  const pt = r
+                    ? { x: r.x + r.w - px(10, s), y: r.y + px(10, s) }
+                    : o && w
+                      ? { x: w.a.x + ((w.b.x - w.a.x) / wallLength(w)) * o.offsetMm, y: w.a.y + ((w.b.y - w.a.y) / wallLength(w)) * o.offsetMm }
+                      : null;
+                  if (!pt) return null;
+                  const mark = i.rating === 'preferred' ? '✓' : i.rating === 'avoid' ? '!' : i.rating === 'acceptable' ? '~' : '·';
+                  return (
+                    <Group key={i.key} x={pt.x} y={pt.y} listening={false}>
+                      <Circle radius={px(8, s)} fill={RATING_COLOR[i.rating]} stroke={palette.plotFill} strokeWidth={1.5} strokeScaleEnabled={false} />
+                      <Text text={mark} x={-px(8, s)} y={-px(6, s)} width={px(16, s)} align="center" fontSize={px(11, s)} fontStyle="bold" fill="#ffffff" />
+                    </Group>
+                  );
+                })}
+            {ui.showZones &&
+              vaasthu?.centreIssues
+                .filter((c) => c.floorId === floor.id)
+                .map((c) => {
+                  const r = floor.rooms.find((x) => x.id === c.elementId);
+                  return r ? (
+                    <Rect key={`c${c.elementId}`} x={r.x} y={r.y} width={r.w} height={r.d} stroke={RATING_COLOR.avoid} strokeWidth={2.5} strokeScaleEnabled={false} dash={[4, 3]} listening={false} />
+                  ) : null;
+                })}
+
             {/* building extents */}
             {ui.showDimensions && buildingBox && !fp && (
               <>
@@ -922,6 +936,68 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
             />
           </Group>
         </Layer>
+        {/* ---------- Vaasthu grid on top of the rooms (not interactive) ---------- */}
+        {(ui.showZones || ui.showSixteen) && (
+          <Layer listening={false}>
+            <Group x={view.x} y={view.y} scaleX={s} scaleY={s}>
+            {ui.showZones && (
+              <Group>
+                {[1, 2].map((k) => (
+                  <Group key={k}>
+                    <Line points={[vg.x + (vg.w * k) / 3, vg.y, vg.x + (vg.w * k) / 3, vg.y + vg.d]} stroke={palette.zone} strokeWidth={1.2} strokeScaleEnabled={false} dash={[8, 6]} opacity={0.75} />
+                    <Line points={[vg.x, vg.y + (vg.d * k) / 3, vg.x + vg.w, vg.y + (vg.d * k) / 3]} stroke={palette.zone} strokeWidth={1.2} strokeScaleEnabled={false} dash={[8, 6]} opacity={0.75} />
+                  </Group>
+                ))}
+                <Rect x={vg.x + vg.w / 3} y={vg.y + vg.d / 3} width={vg.w / 3} height={vg.d / 3} fill={palette.zone} opacity={0.06} />
+                {ZONE_GRID.flatMap((row, r) =>
+                  row.map((z, c) => (
+                    <Text
+                      key={z}
+                      text={z === 'C' ? 'Centre' : z}
+                      x={vg.x + (vg.w * c) / 3 + px(5, s)}
+                      y={vg.y + (vg.d * r) / 3 + px(4, s)}
+                      fontSize={px(12, s)}
+                      fontStyle="bold"
+                      fill={palette.zone}
+                      opacity={0.9}
+                    />
+                  )),
+                )}
+              </Group>
+            )}
+            {ui.showSixteen &&
+              SIXTEEN.map((label, i) => {
+                const cx = vg.x + vg.w / 2;
+                const cy = vg.y + vg.d / 2;
+                const R = Math.max(vg.w, vg.d) * 0.62;
+                const boundaryAngle = ((i * 22.5 + 11.25) * Math.PI) / 180; // sector edges
+                const labelAngle = (i * 22.5 * Math.PI) / 180;
+                return (
+                  <Group key={label}>
+                    <Line
+                      points={[cx, cy, cx + Math.sin(boundaryAngle) * R, cy - Math.cos(boundaryAngle) * R]}
+                      stroke={palette.zone}
+                      strokeWidth={0.8}
+                      strokeScaleEnabled={false}
+                      opacity={0.55}
+                    />
+                    <Text
+                      text={label}
+                      x={cx + Math.sin(labelAngle) * R * 0.97 - px(14, s)}
+                      y={cy - Math.cos(labelAngle) * R * 0.97 - px(6, s)}
+                      width={px(28, s)}
+                      align="center"
+                      fontSize={px(10, s)}
+                      fontStyle="bold"
+                      fill={palette.zone}
+                    />
+                  </Group>
+                );
+              })}
+
+            </Group>
+          </Layer>
+        )}
       </Stage>
 
       <Compass />

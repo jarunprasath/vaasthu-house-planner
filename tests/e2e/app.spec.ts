@@ -120,3 +120,47 @@ test('set a 29×41 house on a 60×58 plot and move it by typing a gap', async ({
   await expect(page.getByRole('textbox', { name: 'South gap' })).toHaveValue(`8'-6"`);
   await expect(page.getByText('2,291 sq ft')).toBeVisible();
 });
+
+test('Vaasthu tab: score, Tamil explanations and rule editing', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Vaasthu' }).click();
+  await expect(page.getByText('/ 100 advisory score')).toBeVisible();
+  await page.getByRole('button', { name: 'தமிழ்' }).click();
+  await expect(page.getByText('வாஸ்து வழிகாட்டல்')).toBeVisible();
+  await page.getByRole('button', { name: 'English' }).click();
+  await page.getByRole('button', { name: 'Edit rules' }).click();
+  await expect(page.getByRole('dialog', { name: 'Vaasthu rules for this project' })).toBeVisible();
+});
+
+test('mark a door as the main entrance', async ({ page }) => {
+  await page.evaluate(() => {
+    const s = (window as any).__vhp.useProjectStore.getState();
+    const door = s.project.floors[0].openings.find((o: any) => o.label === 'D1');
+    s.select({ kind: 'opening', id: door.id });
+  });
+  const box = page.getByRole('checkbox', { name: /Main entrance/ });
+  await expect(box).not.toBeChecked();
+  await box.check();
+  const mains = await page.evaluate(() =>
+    (window as any).__vhp.useProjectStore.getState().project.floors[0].openings.filter((o: any) => o.isMain).map((o: any) => o.label),
+  );
+  expect(mains).toEqual(['D1']);
+});
+
+test('paint dialog changes the exterior colour', async ({ page }) => {
+  await page.getByRole('button', { name: 'Choose paint, floors & roof' }).click();
+  await page.getByRole('button', { name: 'Exterior walls: Sky blue' }).click();
+  const c = await page.evaluate(() => (window as any).__vhp.useProjectStore.getState().project.finishes.exteriorWall);
+  expect(c).toBe('#cbe0ee');
+});
+
+test('3D view loads without errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.getByRole('button', { name: '3D view' }).click();
+  await expect(page.getByTestId('view-3d').locator('canvas')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Top' }).click();
+  await page.getByLabel('Remove roof to look inside').check();
+  await page.getByRole('button', { name: '2D plan' }).click();
+  await expect(page.locator('main canvas').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});

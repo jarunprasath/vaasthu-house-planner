@@ -53,7 +53,7 @@ docs/           this plan, user guide notes
 
 ## 3. Phases
 
-### Phase 1 — Functional foundation (this delivery)
+### Phase 1 — Functional foundation (delivered)
 - Vite + React + TypeScript + Tailwind; GitHub Pages deployment workflow.
 - Plot configuration: rectangular or irregular boundary (editable vertices), roads and neighbours per
   side, setbacks per side, elevation, slope, floor count, max height, max ground coverage, units.
@@ -69,7 +69,7 @@ docs/           this plan, user guide notes
 - Templates: blank, 1BHK, and the 60 ft × 58 ft north-facing 2BHK sample project.
 - Light / dark theme.
 
-### Phase 2 — Vaasthu engine and 3D
+### Phase 2 — Vaasthu engine and 3D (delivered)
 - Configurable Vaasthu rule profiles (8 / 16 sectors, 3×3 and 9×9 grids), per-room checklist,
   advisory score, alternative placements, English + Tamil explanations. Vaasthu output is always
   labelled as traditional preference, kept separate from regulation / safety checks, and can never

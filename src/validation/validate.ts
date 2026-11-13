@@ -28,9 +28,9 @@ export interface Issue {
 }
 
 /** Open, uncovered site elements that may sit inside setbacks. */
-const SETBACK_ALLOWED: RoomType[] = ['garden', 'pathway', 'parking', 'courtyard'];
+const SETBACK_ALLOWED: RoomType[] = ['garden', 'pathway', 'parking', 'courtyard', 'sump', 'septic_tank', 'borewell'];
 /** Site elements that may overlap each other. */
-const OVERLAP_ALLOWED: RoomType[] = ['garden', 'pathway'];
+const OVERLAP_ALLOWED: RoomType[] = ['garden', 'pathway', 'sump', 'septic_tank', 'borewell', 'terrace', 'overhead_tank'];
 /** Rooms that are expected to have at least one door. */
 /** Rooms expected to have a window or ventilator for daylight / ventilation. */
 const NEEDS_WINDOW: RoomType[] = ['living', 'bedroom', 'master_bedroom', 'bathroom', 'toilet', 'kitchen'];
