@@ -4,6 +4,32 @@ import { useUiStore, type Tool } from '../store/uiStore';
 import { Button, Check, Section } from './fields';
 import { Icon } from './icons';
 
+function HouseButton() {
+  const has = useProjectStore((s) => !!s.project.footprint);
+  const addFootprint = useProjectStore((s) => s.addFootprint);
+  const select = useProjectStore((s) => s.select);
+  const setTool = useUiStore((s) => s.setTool);
+  return (
+    <>
+      <Button
+        className="w-full"
+        variant={has ? 'default' : 'primary'}
+        onClick={() => {
+          setTool('select');
+          if (has) select({ kind: 'footprint', id: 'footprint' });
+          else addFootprint();
+        }}
+        title={has ? 'Edit house size and position' : 'Add house outline'}
+      >
+        <Icon name="room" size={16} /> {has ? 'Edit house size & position' : 'Add house outline'}
+      </Button>
+      <p className="text-xs text-muted">
+        {has ? 'Drag the orange outline to move the house; arrow keys nudge it.' : 'Set the overall house size, then move it around the plot.'}
+      </p>
+    </>
+  );
+}
+
 export const TOOLS: { id: Tool; label: string; key: string; icon: string }[] = [
   { id: 'select', label: 'Select & move', key: 'V', icon: 'select' },
   { id: 'pan', label: 'Pan', key: 'H', icon: 'pan' },
@@ -52,6 +78,10 @@ export function ToolPanel() {
             );
           })}
         </div>
+      </Section>
+
+      <Section title="House outline">
+        <HouseButton />
       </Section>
 
       <Section title="Add a room">

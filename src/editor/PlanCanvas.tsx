@@ -17,6 +17,7 @@ import {
 } from '../model/geometry';
 import { formatLength, gridStepMm } from '../model/units';
 import type { Point, Wall } from '../model/types';
+import { clearances, houseContents } from '../model/footprint';
 import { activeFloor, useProjectStore } from '../store/projectStore';
 import { useCursorStore } from '../store/cursorStore';
 import { useUiStore } from '../store/uiStore';
@@ -40,6 +41,8 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   const addRoom = useProjectStore((s) => s.addRoom);
   const addWall = useProjectStore((s) => s.addWall);
   const addOpening = useProjectStore((s) => s.addOpening);
+  const updateFootprint = useProjectStore((s) => s.updateFootprint);
+  const moveHouse = useProjectStore((s) => s.moveHouse);
 
   const ui = useUiStore();
   const { view, tool } = ui;
@@ -55,6 +58,19 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
     [project.floors, floor.level],
   );
   const isGround = floor.level === 0;
+
+  // House outline: while it is being dragged, rooms and walls inside it are drawn shifted by the drag.
+  const fp = project.footprint;
+  const [houseDrag, setHouseDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const houseInside = useMemo(() => (fp ? houseContents(project, fp) : null), [project, fp]);
+  const shiftOf = (id: string, kind: 'room' | 'wall') =>
+    houseDrag && houseInside && (kind === 'room' ? houseInside.rooms : houseInside.walls).has(id) ? houseDrag : null;
+  const liveWall = (w: Wall): Wall => {
+    const o = shiftOf(w.id, 'wall');
+    return o ? { ...w, a: { x: w.a.x + o.dx, y: w.a.y + o.dy }, b: { x: w.b.x + o.dx, y: w.b.y + o.dy } } : w;
+  };
+  const liveFp = fp && houseDrag ? { ...fp, x: fp.x + houseDrag.dx, y: fp.y + houseDrag.dy } : fp;
+  const footprintRectRef = useRef<Konva.Rect>(null);
 
   // Drafting state
   const [draftRect, setDraftRect] = useState<{ a: Point; b: Point } | null>(null);
@@ -129,10 +145,12 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   useEffect(() => {
     const tr = transformerRef.current;
     if (!tr) return;
-    const node = selectedRoom && !selectedRoom.locked && tool === 'select' ? roomRectRefs.current.get(selectedRoom.id) : undefined;
+    let node: Konva.Rect | null | undefined =
+      selectedRoom && !selectedRoom.locked && tool === 'select' ? roomRectRefs.current.get(selectedRoom.id) : undefined;
+    if (selection?.kind === 'footprint' && fp && !fp.locked && tool === 'select') node = footprintRectRef.current;
     tr.nodes(node ? [node] : []);
     tr.getLayer()?.batchDraw();
-  }, [selectedRoom, tool, project]);
+  }, [selectedRoom, selection, fp, tool, project]);
 
   // ---------- coordinate helpers ----------
   const toWorld = useCallback(
@@ -475,6 +493,70 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
         {/* ---------- design layer ---------- */}
         <Layer>
           <Group x={view.x} y={view.y} scaleX={s} scaleY={s}>
+            {/* ---------- house outline ---------- */}
+            {liveFp && fp && (
+              <Group
+                x={liveFp.x}
+                y={liveFp.y}
+                draggable={tool === 'select' && !fp.locked}
+                onMouseDown={(e) => {
+                  if (tool !== 'select') return;
+                  e.cancelBubble = true;
+                  select({ kind: 'footprint', id: 'footprint' });
+                }}
+                onTouchStart={(e) => {
+                  if (tool !== 'select') return;
+                  e.cancelBubble = true;
+                  select({ kind: 'footprint', id: 'footprint' });
+                }}
+                onDragMove={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  const n = e.target;
+                  const dx = snap(n.x() - fp.x, snapMm);
+                  const dy = snap(n.y() - fp.y, snapMm);
+                  n.position({ x: fp.x + dx, y: fp.y + dy });
+                  setHouseDrag({ dx, dy });
+                }}
+                onDragEnd={(e) => {
+                  if (e.target !== e.currentTarget) return;
+                  const n = e.target;
+                  const dx = snap(n.x() - fp.x, snapMm);
+                  const dy = snap(n.y() - fp.y, snapMm);
+                  setHouseDrag(null);
+                  moveHouse(dx, dy);
+                }}
+                name="footprint"
+              >
+                <Rect
+                  ref={footprintRectRef}
+                  width={liveFp.w}
+                  height={liveFp.d}
+                  fill={palette.selection}
+                  opacity={selection?.kind === 'footprint' ? 0.1 : 0.05}
+                  onTransformEnd={(e) => {
+                    const n = e.target as Konva.Rect;
+                    const nx = snap(fp.x + n.x(), snapMm);
+                    const ny = snap(fp.y + n.y(), snapMm);
+                    const right = snap(fp.x + n.x() + n.width() * n.scaleX(), snapMm);
+                    const bottom = snap(fp.y + n.y() + n.height() * n.scaleY(), snapMm);
+                    n.scaleX(1);
+                    n.scaleY(1);
+                    n.position({ x: 0, y: 0 });
+                    updateFootprint({ x: nx, y: ny, w: Math.max(1000, right - nx), d: Math.max(1000, bottom - ny) });
+                  }}
+                />
+                <Rect
+                  width={liveFp.w}
+                  height={liveFp.d}
+                  stroke={palette.selection}
+                  strokeWidth={selection?.kind === 'footprint' ? 3 : 2}
+                  strokeScaleEnabled={false}
+                  dash={[12, 6]}
+                  listening={false}
+                />
+              </Group>
+            )}
+
             {floor.rooms.map((r) => {
               const sel = selection?.kind === 'room' && selection.id === r.id;
               const { fill, opacity } = roomFill(r, dark);
@@ -482,8 +564,8 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
               return (
                 <Group
                   key={r.id}
-                  x={r.x}
-                  y={r.y}
+                  x={r.x + (shiftOf(r.id, 'room')?.dx ?? 0)}
+                  y={r.y + (shiftOf(r.id, 'room')?.dy ?? 0)}
                   draggable={canDrag}
                   onMouseDown={(e) => {
                     if (tool !== 'select') return;
@@ -563,7 +645,7 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
               return (
                 <WallShape
                   key={w.id}
-                  wall={w}
+                  wall={liveWall(w)}
                   palette={palette}
                   scale={s}
                   selected={sel}
@@ -585,8 +667,9 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
               ...(isGround
                 ? project.siteOpenings.map((o) => ({ o, wall: project.siteWalls.find((w) => w.id === o.wallId), site: true }))
                 : []),
-            ].map(({ o, wall, site }) => {
-              if (!wall) return null;
+            ].map(({ o, wall: hostWall, site }) => {
+              if (!hostWall) return null;
+              const wall = site ? hostWall : liveWall(hostWall);
               const kind = site ? 'siteOpening' : 'opening';
               const sel = selection?.kind === kind && selection.id === o.id;
               const len = wallLength(wall);
@@ -615,8 +698,64 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
               );
             })}
 
+            {/* house size tab (drag handle) and clearances to the plot boundary */}
+            {liveFp && fp && (
+              <>
+                <Group
+                  x={liveFp.x}
+                  y={liveFp.y - px(24, s)}
+                  draggable={tool === 'select' && !fp.locked}
+                  onMouseDown={(e) => {
+                    if (tool !== 'select') return;
+                    e.cancelBubble = true;
+                    select({ kind: 'footprint', id: 'footprint' });
+                  }}
+                  onDragMove={(e) => {
+                    const n = e.target;
+                    const dx = snap(n.x() - fp.x, snapMm);
+                    const dy = snap(n.y() + px(24, s) - fp.y, snapMm);
+                    n.position({ x: fp.x + dx, y: fp.y + dy - px(24, s) });
+                    setHouseDrag({ dx, dy });
+                  }}
+                  onDragEnd={(e) => {
+                    const n = e.target;
+                    const dx = snap(n.x() - fp.x, snapMm);
+                    const dy = snap(n.y() + px(24, s) - fp.y, snapMm);
+                    setHouseDrag(null);
+                    moveHouse(dx, dy);
+                  }}
+                  name="footprint-tab"
+                >
+                  {(() => {
+                    const label = `House ${formatLength(liveFp.w, unit)} × ${formatLength(liveFp.d, unit)}${fp.locked ? '  (locked)' : ''}`;
+                    const fs = px(12, s);
+                    const w = fs * label.length * 0.56 + px(16, s);
+                    return (
+                      <>
+                        <Rect width={w} height={px(20, s)} fill={palette.selection} cornerRadius={px(3, s)} />
+                        <Text text={label} x={px(8, s)} y={px(4, s)} fontSize={fs} fontStyle="bold" fill={palette.plotFill} listening={false} />
+                      </>
+                    );
+                  })()}
+                </Group>
+                {ui.showDimensions &&
+                  clearances(liveFp, project.plot.boundary).map((c) => (
+                    <Group key={c.side} listening={false}>
+                      <DimensionLine
+                        a={c.from}
+                        b={c.to}
+                        offset={0}
+                        unit={unit}
+                        scale={s}
+                        color={palette.selection}
+                      />
+                    </Group>
+                  ))}
+              </>
+            )}
+
             {/* building extents */}
-            {ui.showDimensions && buildingBox && (
+            {ui.showDimensions && buildingBox && !fp && (
               <>
                 <DimensionLine
                   a={{ x: buildingBox.x, y: buildingBox.y + buildingBox.d }}

@@ -94,3 +94,29 @@ test('@phone toolbar fits on a phone screen', async ({ page }) => {
   expect(box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await expect(page.getByRole('button', { name: 'Export & print' })).toBeInViewport();
 });
+
+test('set a 29×41 house on a 60×58 plot and move it by typing a gap', async ({ page }) => {
+  await page.getByRole('button', { name: 'Projects & templates' }).click();
+  await page.getByRole('button', { name: /Blank plot/ }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.getByRole('button', { name: 'Plot settings', exact: true }).click();
+  const dlg = page.getByRole('dialog');
+  for (const [label, v] of [['Width (east–west)', '60'], ['Depth (north–south)', '58']] as const) {
+    await dlg.getByLabel(label).fill(v);
+    await dlg.getByLabel(label).press('Enter');
+  }
+  await dlg.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Add house outline' }).first().click();
+  for (const [label, v] of [['House width', '29'], ['House depth', '41']] as const) {
+    await page.getByRole('textbox', { name: label }).fill(v);
+    await page.getByRole('textbox', { name: label }).press('Enter');
+  }
+  const west = page.getByRole('textbox', { name: 'West gap' });
+  await west.fill('10');
+  await west.press('Enter');
+  await expect(page.getByRole('textbox', { name: 'East gap' })).toHaveValue(`21'-0"`);
+  await page.getByRole('button', { name: 'Centre north–south' }).click();
+  await expect(page.getByRole('textbox', { name: 'North gap' })).toHaveValue(`8'-6"`);
+  await expect(page.getByRole('textbox', { name: 'South gap' })).toHaveValue(`8'-6"`);
+  await expect(page.getByText('2,291 sq ft')).toBeVisible();
+});

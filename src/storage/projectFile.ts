@@ -32,6 +32,7 @@ export function migrateProject(raw: unknown): Project {
     plot: { ...p.plot, boundary: ensureClockwise(p.plot.boundary) },
     siteWalls: p.siteWalls ?? [],
     siteOpenings: p.siteOpenings ?? [],
+    footprint: p.footprint ?? null,
     schemaVersion: SCHEMA_VERSION,
   };
 }

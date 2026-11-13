@@ -103,6 +103,8 @@ export function createSampleProject(): Project {
   ];
 
   project.floors = [g, roof];
+  // House outline = the building envelope (44' east–west × 33' north–south).
+  project.footprint = { x: ft(7), y: ft(15), w: ft(44), d: ft(33), locked: false };
 
   // Compound wall with a vehicle gate on the west road and a pedestrian gate on the east road.
   project.siteWalls = buildCompoundWalls(project);

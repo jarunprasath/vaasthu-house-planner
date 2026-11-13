@@ -76,6 +76,13 @@ export default function App() {
         useUiStore.getState().setTool('select');
         return;
       }
+      if (s.selection?.kind === 'footprint' && e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        const step = (s.project.settings.snapMm || 152.4) * (e.shiftKey ? 2 : 1);
+        const d = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] }[e.key];
+        if (d) s.moveHouse(d[0], d[1]);
+        return;
+      }
       if (k === 'r') return s.rotateSelectedRoom();
       if (k === 'l') return s.toggleLockSelection();
       if (k === 'f') return useUiStore.getState().requestFit();

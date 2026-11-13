@@ -18,6 +18,13 @@ is built and tested; nothing in the app is a placeholder.
 - Roads and neighbours on any side, road widths, setbacks per side, plot level, slope.
 - Limits to check against: maximum floors, height and ground coverage.
 
+**House on the plot**
+- Set the house’s overall size separately from the plot (for example a 29′ × 41′ house on a 60′ × 58′ plot).
+- Drag the house outline (or its label) around the plot; the rooms and walls inside it move with it on
+  every floor. Arrow keys nudge it.
+- Live gap to each boundary and the open land left; type a gap to place the house, or centre it.
+- Shown on the PDF site plan and in the area statement; flagged if it leaves the plot or enters a setback.
+
 **2D plan editor**
 - Draw rooms by dragging; move, resize, rotate 90°, duplicate, lock, delete.
 - Type exact sizes and positions in feet-and-inches, inches, metres or centimetres

@@ -153,6 +153,22 @@ export interface Project {
   siteWalls: Wall[];
   /** Gates hosted on site walls. */
   siteOpenings: Opening[];
+  /**
+   * The house outline on the plot (the building's overall size), or null if not set.
+   * It can be sized and moved independently; moving it carries the rooms and walls inside it.
+   */
+  footprint: Footprint | null;
+}
+
+export interface Footprint {
+  /** North-west corner (mm). */
+  x: number;
+  y: number;
+  /** East-west size (mm). */
+  w: number;
+  /** North-south size (mm). */
+  d: number;
+  locked: boolean;
 }
 
 /** Room types that are open / outdoor and are reported separately from enclosed built-up area. */

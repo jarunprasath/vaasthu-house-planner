@@ -3,9 +3,10 @@ import { produce, type Draft } from 'immer';
 import { createFloor, createOpening, createProject, newId } from '../model/factory';
 import { pointAlongWall, wallLength } from '../model/geometry';
 import { buildCompoundWalls, rebuildFloorWalls } from '../model/wallBuilder';
-import type { Floor, Opening, OpeningType, Project, Room, Side, Wall } from '../model/types';
+import { defaultFootprint, houseContents } from '../model/footprint';
+import type { Floor, Footprint, Opening, OpeningType, Project, Room, Side, Wall } from '../model/types';
 
-export type SelectionKind = 'room' | 'wall' | 'opening' | 'siteWall' | 'siteOpening';
+export type SelectionKind = 'room' | 'wall' | 'opening' | 'siteWall' | 'siteOpening' | 'footprint';
 export interface Selection {
   kind: SelectionKind;
   id: string;
@@ -43,6 +44,14 @@ interface ProjectState {
   rebuildWalls: () => void;
   generateCompoundWall: (gates: Side[]) => void;
   removeCompoundWall: () => void;
+
+  /** Create the house outline (defaults to the current building extent or the buildable area). */
+  addFootprint: () => void;
+  removeFootprint: () => void;
+  /** Change the outline's size or position without moving any rooms. */
+  updateFootprint: (patch: Partial<Footprint>) => void;
+  /** Move the house: the outline plus every room and wall inside it, on all floors. */
+  moveHouse: (dx: number, dy: number) => void;
 
   addFloor: () => void;
   duplicateFloor: (id: string) => void;
@@ -239,6 +248,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           if (o && !o.locked) d.siteOpenings = d.siteOpenings.filter((x) => x.id !== selection.id);
           break;
         }
+        case 'footprint':
+          // Removes only the outline; rooms and walls stay where they are.
+          if (d.footprint && !d.footprint.locked) d.footprint = null;
+          break;
       }
     });
     set({ selection: null });
@@ -279,13 +292,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (!selection) return;
     get().commit((d) => {
       const f = floorDraft(d, activeFloorId);
-      const lists: Record<SelectionKind, { id: string; locked: boolean }[]> = {
+      const lists: Record<Exclude<SelectionKind, 'footprint'>, { id: string; locked: boolean }[]> = {
         room: f.rooms,
         wall: f.walls,
         opening: f.openings,
         siteWall: d.siteWalls,
         siteOpening: d.siteOpenings,
       };
+      if (selection.kind === 'footprint') {
+        if (d.footprint) d.footprint.locked = !d.footprint.locked;
+        return;
+      }
       const el = lists[selection.kind].find((x) => x.id === selection.id);
       if (el) el.locked = !el.locked;
     });
@@ -352,6 +369,54 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       d.siteWalls = [];
       d.siteOpenings = [];
     }),
+
+  addFootprint: () => {
+    const p = get().project;
+    if (p.footprint) return;
+    const f = defaultFootprint(p);
+    get().commit((d) => {
+      d.footprint = f;
+    });
+    set({ selection: { kind: 'footprint', id: 'footprint' } });
+  },
+
+  removeFootprint: () =>
+    get().commit((d) => {
+      d.footprint = null;
+    }),
+
+  updateFootprint: (patch) =>
+    get().commit((d) => {
+      if (d.footprint) Object.assign(d.footprint, patch);
+    }),
+
+  moveHouse: (dx, dy) => {
+    const p = get().project;
+    const f = p.footprint;
+    if (!f || f.locked || (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01)) return;
+    const inside = houseContents(p, f);
+    // Round to 0.01 mm so repeated moves don't accumulate floating-point noise.
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    get().commit((d) => {
+      if (!d.footprint) return;
+      d.footprint.x = r2(d.footprint.x + dx);
+      d.footprint.y = r2(d.footprint.y + dy);
+      for (const floor of d.floors) {
+        for (const r of floor.rooms) {
+          if (inside.rooms.has(r.id)) {
+            r.x = r2(r.x + dx);
+            r.y = r2(r.y + dy);
+          }
+        }
+        for (const w of floor.walls) {
+          if (inside.walls.has(w.id)) {
+            w.a = { x: r2(w.a.x + dx), y: r2(w.a.y + dy) };
+            w.b = { x: r2(w.b.x + dx), y: r2(w.b.y + dy) };
+          }
+        }
+      }
+    });
+  },
 
   addFloor: () => {
     const p = get().project;

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { clearances, defaultFootprint, openLandArea } from '../model/footprint';
 import { floorAreas, groundCoveragePercent, plotArea } from '../model/areas';
 import { SIDE_NAMES } from '../model/factory';
 import { boundingBox, rectCenter, wallDir, wallLength, zoneOf, ZONE_LABELS } from '../model/geometry';
@@ -17,7 +18,9 @@ export function PropertiesPanel() {
   const floor = activeFloor({ project, activeFloorId });
 
   let body: React.ReactNode = null;
-  if (selection?.kind === 'room') {
+  if (selection?.kind === 'footprint' && project.footprint) {
+    body = <FootprintProps project={project} />;
+  } else if (selection?.kind === 'room') {
     const r = floor.rooms.find((x) => x.id === selection.id);
     if (r) body = <RoomProps room={r} project={project} />;
   } else if (selection?.kind === 'wall' || selection?.kind === 'siteWall') {
@@ -173,6 +176,162 @@ function WallProps({ wall, site, project }: { wall: Wall; site: boolean; project
   );
 }
 
+const SIDE_ORDER: Side[] = ['N', 'E', 'S', 'W'];
+
+function FootprintProps({ project }: { project: Project }) {
+  const s = useProjectStore();
+  const f = project.footprint!;
+  const unit = project.settings.unit;
+  const dis = f.locked;
+  const gaps = clearances(f, project.plot.boundary);
+  const gap = (side: Side) => gaps.find((g) => g.side === side);
+  /** Move the house so the gap on `side` becomes `target`. */
+  const setGap = (side: Side, target: number) => {
+    const cur = gap(side);
+    if (!cur) return;
+    const delta = target - cur.mm;
+    const move = { N: [0, delta], S: [0, -delta], E: [-delta, 0], W: [delta, 0] }[side];
+    s.moveHouse(move[0], move[1]);
+  };
+  const centre = (axis: 'x' | 'y') => {
+    if (axis === 'x') {
+      const e = gap('E');
+      const w = gap('W');
+      if (e && w) s.moveHouse((e.mm - w.mm) / 2, 0);
+    } else {
+      const n = gap('N');
+      const so = gap('S');
+      if (n && so) s.moveHouse(0, (so.mm - n.mm) / 2);
+    }
+  };
+  const plotMm2 = plotArea(project);
+  return (
+    <>
+      <BackLink />
+      <Section title="House on the plot">
+        <p className="text-xs text-muted">
+          The house outline is the building’s overall size. Drag it on the plan (or its orange label) to try
+          different positions; the rooms and walls inside it move with it.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="House width (east–west)">
+            <LengthInput valueMm={f.w} unit={unit} min={1000} disabled={dis} onCommit={(w) => s.updateFootprint({ w })} ariaLabel="House width" />
+          </Field>
+          <Field label="House depth (north–south)">
+            <LengthInput valueMm={f.d} unit={unit} min={1000} disabled={dis} onCommit={(d) => s.updateFootprint({ d })} ariaLabel="House depth" />
+          </Field>
+        </div>
+        <Button disabled={dis} onClick={() => s.updateFootprint({ w: f.d, d: f.w })} title="Swap width and depth">
+          <Icon name="rotate" size={15} /> Swap width and depth
+        </Button>
+        <p className="text-xs text-muted">Changing the size keeps the north-west corner in place and does not move any rooms.</p>
+      </Section>
+      <Section title="Open space around the house">
+        <div className="grid grid-cols-2 gap-2">
+          {SIDE_ORDER.map((side) => {
+            const g = gap(side);
+            return (
+              <Field key={side} label={`${SIDE_NAMES[side]} side`}>
+                {g ? (
+                  <LengthInput valueMm={g.mm} unit={unit} disabled={dis} onCommit={(v) => setGap(side, v)} ariaLabel={`${SIDE_NAMES[side]} gap`} />
+                ) : (
+                  <p className="py-1.5 text-sm text-danger">Outside the plot</p>
+                )}
+              </Field>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted">
+          Type a gap to move the house to it.
+          {project.plot.boundary.length !== 4 && ' On an irregular plot each gap is measured from the middle of that side of the house.'}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          <Button disabled={dis} onClick={() => centre('x')}>
+            Centre east–west
+          </Button>
+          <Button disabled={dis} onClick={() => centre('y')}>
+            Centre north–south
+          </Button>
+        </div>
+        <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">
+          <dt className="text-muted">House area</dt>
+          <dd className="font-bold">{formatArea(f.w * f.d, unit)}</dd>
+          <dt className="text-muted">Share of the plot</dt>
+          <dd>{plotMm2 > 0 ? ((f.w * f.d * 100) / plotMm2).toFixed(1) : '0'}%</dd>
+          <dt className="text-muted">Open land left</dt>
+          <dd>{formatArea(openLandArea(project), unit)}</dd>
+        </dl>
+      </Section>
+      <Section title="Outline">
+        <div className="flex flex-wrap gap-1.5">
+          <Button disabled={dis} onClick={() => s.updateFootprint({ ...defaultFootprint({ ...project, footprint: null }), locked: false })} title="Fit the outline around the existing rooms">
+            Fit outline to rooms
+          </Button>
+          <Button onClick={s.toggleLockSelection} ariaPressed={f.locked} title={f.locked ? 'Unlock (L)' : 'Lock (L)'}>
+            <Icon name="lock" size={15} /> {f.locked ? 'Unlock' : 'Lock'}
+          </Button>
+          <Button variant="danger" disabled={dis} onClick={s.deleteSelection} title="Remove outline">
+            <Icon name="trash" size={15} /> Remove outline
+          </Button>
+        </div>
+        <p className="text-xs text-muted">Removing the outline keeps all rooms and walls.</p>
+      </Section>
+    </>
+  );
+}
+
+function HouseSummary({ project }: { project: Project }) {
+  const s = useProjectStore();
+  const f = project.footprint;
+  const unit = project.settings.unit;
+  if (!f) {
+    return (
+      <Section title="House on the plot">
+        <p className="text-sm text-ink-soft">
+          Set the house’s overall size (for example 29′ × 41′) and move it around the plot to see how much open
+          land is left on each side.
+        </p>
+        <Button variant="primary" onClick={s.addFootprint}>
+          Add house outline
+        </Button>
+      </Section>
+    );
+  }
+  const gaps = clearances(f, project.plot.boundary);
+  return (
+    <Section
+      title="House on the plot"
+      action={
+        <button className="text-sm text-ink-soft underline-offset-2 hover:underline" onClick={() => s.select({ kind: 'footprint', id: 'footprint' })}>
+          Edit
+        </button>
+      }
+    >
+      <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">
+        <dt className="text-muted">House size</dt>
+        <dd className="font-bold">
+          {formatLength(f.w, unit)} × {formatLength(f.d, unit)}
+        </dd>
+        <dt className="text-muted">House area</dt>
+        <dd>{formatArea(f.w * f.d, unit)}</dd>
+        <dt className="text-muted">Open land left</dt>
+        <dd>{formatArea(openLandArea(project), unit)}</dd>
+        {SIDE_ORDER.map((side) => {
+          const g = gaps.find((x) => x.side === side);
+          return [
+            <dt key={`${side}k`} className="text-muted">
+              Gap to {SIDE_NAMES[side].toLowerCase()} boundary
+            </dt>,
+            <dd key={`${side}v`} className={g ? '' : 'text-danger'}>
+              {g ? formatLength(g.mm, unit) : 'outside'}
+            </dd>,
+          ];
+        })}
+      </dl>
+    </Section>
+  );
+}
+
 function OpeningProps({ opening, wall, site, project }: { opening: Opening; wall: Wall; site: boolean; project: Project }) {
   const update = useProjectStore((s) => s.updateOpening);
   const unit = project.settings.unit;
@@ -240,6 +399,7 @@ function Overview({ project }: { project: Project }) {
     if (i.floorId) s.setActiveFloor(i.floorId);
     const id = i.elementIds[0];
     if (!id) return;
+    if (id === 'footprint') return s.select({ kind: 'footprint', id });
     const f = project.floors.find((x) => x.id === (i.floorId ?? floor.id));
     if (!f) return;
     if (f.rooms.some((r) => r.id === id)) s.select({ kind: 'room', id });
@@ -276,6 +436,8 @@ function Overview({ project }: { project: Project }) {
           <dd>{coverage.toFixed(1)}%</dd>
         </dl>
       </Section>
+
+      <HouseSummary project={project} />
 
       <Section title={`${floor.name} — areas`}>
         <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">

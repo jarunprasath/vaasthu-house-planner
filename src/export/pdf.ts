@@ -7,6 +7,7 @@ import { ROOM_COLORS, ROOM_TYPE_LABELS } from '../model/types';
 import type { Floor, Opening, Point, Project, Wall } from '../model/types';
 
 import { PAPER_MM, SCALES, type PaperSize } from './paper';
+import { clearances, openLandArea } from '../model/footprint';
 export { PAPER_MM, SCALES, type PaperSize };
 
 export interface PdfOptions {
@@ -307,6 +308,28 @@ function drawPlotContext(sh: Sheet, project: Project, strong: boolean) {
 
 }
 
+/** House outline with the open gap on each side, in the accent colour. */
+function drawFootprint(sh: Sheet, project: Project) {
+  const f = project.footprint!;
+  const doc = sh.doc;
+  const OCHRE: [number, number, number] = [184, 134, 11];
+  doc.setDrawColor(...OCHRE);
+  doc.setLineWidth(0.45);
+  doc.setLineDashPattern([2.5, 1.2], 0);
+  doc.rect(sh.X(f.x), sh.Y(f.y), f.w / sh.denom, f.d / sh.denom, 'S');
+  doc.setLineDashPattern([], 0);
+  const unit = project.settings.unit;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...OCHRE);
+  doc.text(`HOUSE ${formatLength(f.w, unit)} x ${formatLength(f.d, unit)}`, sh.X(f.x), sh.Y(f.y) - 1.2);
+  doc.setFont('helvetica', 'normal');
+  for (const c of clearances(f, project.plot.boundary)) {
+    if (c.mm < 1) continue;
+    dimension(sh, c.from, c.to, 0, formatLength(c.mm, unit), OCHRE);
+  }
+}
+
 /** Plot edge dimensions — drawn last so room fills never cover them. */
 function plotDimensions(sh: Sheet, project: Project) {
   const boundary = project.plot.boundary;
@@ -521,6 +544,7 @@ export function buildPdf(project: Project, opts: PdfOptions): jsPDF {
     if (site && ground) drawFloor(sh, project, ground, true);
     if (!site && floor) drawFloor(sh, project, floor, floor.level === 0);
     plotDimensions(sh, project);
+    if (site && project.footprint) drawFootprint(sh, project);
 
     if (floor && floor.walls.length) {
       const wb = boundingBox(floor.walls.flatMap((w) => [w.a, w.b]));
@@ -613,6 +637,12 @@ export function buildPdf(project: Project, opts: PdfOptions): jsPDF {
             line('Plot size', `${formatLength(box.w, unit)} x ${formatLength(box.d, unit)}`);
             line('Plot area', formatArea(plotArea(project), unit));
             line('Ground coverage', `${groundCoveragePercent(project).toFixed(1)}%`);
+            if (project.footprint) {
+              const f = project.footprint;
+              line('House outline', `${formatLength(f.w, unit)} x ${formatLength(f.d, unit)} (${formatArea(f.w * f.d, unit)})`);
+              line('Open land around the house', formatArea(openLandArea(project), unit));
+              for (const c of clearances(f, project.plot.boundary)) line(`Gap to ${SIDE_NAMES[c.side].toLowerCase()} boundary`, formatLength(c.mm, unit));
+            }
             (['N', 'E', 'S', 'W'] as const).forEach((s) => line(`Setback ${SIDE_NAMES[s].toLowerCase()}`, formatLength(project.plot.setbacks[s], unit)));
             ay += 2;
             for (const f of [...project.floors].sort((a, b) => a.level - b.level)) {

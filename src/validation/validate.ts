@@ -6,11 +6,13 @@ import {
   EPS,
   pointAlongWall,
   pointInPolygon,
+  pointInRect,
   rectCorners,
   rectOverlapArea,
   wallLength,
 } from '../model/geometry';
 import { formatLength } from '../model/units';
+import { footprintInsidePlot, SITE_ROOM_TYPES } from '../model/footprint';
 import type { Floor, Project, Room, RoomType, Side } from '../model/types';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -87,6 +89,38 @@ export function validateProject(project: Project): Issue[] {
     }
   }
 
+  const fp = project.footprint;
+  if (fp) {
+    if (!footprintInsidePlot(fp, boundary)) {
+      add({ severity: 'error', category: 'plot', message: 'The house outline extends outside the plot.', elementIds: ['footprint'] });
+    } else {
+      const sides = setbackSidesViolated(project, fp);
+      if (sides.length) {
+        add({
+          severity: 'warning',
+          category: 'regulation',
+          message: `The house outline is inside the ${sides.map((s) => SIDE_NAMES[s].toLowerCase()).join(' and ')} setback.`,
+          elementIds: ['footprint'],
+        });
+      }
+    }
+    for (const floor of sortedFloors) {
+      for (const r of floor.rooms) {
+        if (SITE_ROOM_TYPES.includes(r.type)) continue;
+        const outside = rectCorners(r).some((c) => !pointInRect(c, fp, 1));
+        if (outside) {
+          add({
+            severity: 'warning',
+            category: 'geometry',
+            message: `${r.name} (${floor.name}) sticks out of the house outline.`,
+            floorId: floor.id,
+            elementIds: [r.id],
+          });
+        }
+      }
+    }
+  }
+
   for (const floor of sortedFloors) {
     validateFloor(project, floor, add);
   }
@@ -104,7 +138,7 @@ export function validateProject(project: Project): Issue[] {
   return issues;
 }
 
-function setbackSidesViolated(project: Project, r: Room): Side[] {
+function setbackSidesViolated(project: Project, r: { x: number; y: number; w: number; d: number }): Side[] {
   const boundary = project.plot.boundary;
   const sides = new Set<Side>();
   for (const c of rectCorners(r)) {

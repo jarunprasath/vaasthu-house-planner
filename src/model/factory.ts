@@ -77,6 +77,7 @@ export function createProject(name = 'Untitled house', plot: Plot = createPlot()
     floors: [createFloor(0)],
     siteWalls: [],
     siteOpenings: [],
+    footprint: null,
   };
 }
 
