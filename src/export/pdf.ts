@@ -4,11 +4,15 @@ import { SIDE_NAMES } from '../model/factory';
 import { boundingBox, dist, edgeSide, insetPolygon, type Rect, wallDir } from '../model/geometry';
 import { formatArea, formatLength, formatSize } from '../model/units';
 import { ROOM_COLORS, ROOM_TYPE_LABELS } from '../model/types';
-import type { Floor, Opening, Point, Project, Wall } from '../model/types';
+import type { Floor, Opening, Point, Project, Side, Wall } from '../model/types';
 
 import { PAPER_MM, SCALES, type PaperSize } from './paper';
 import { clearances, openLandArea } from '../model/footprint';
 import { evaluate } from '../vaasthu/engine';
+import { catalogEntry, itemCorners } from '../model/catalog';
+import { computeElevation, ELEVATION_TITLES, type Elevation } from '../model/elevation';
+import { buildParts } from '../three/buildModel';
+import { isPolygonRoom, roomArea, roomLabelRect, roomPolygon } from '../model/roomShape';
 import { ZONE_NAMES } from '../vaasthu/rules';
 export { PAPER_MM, SCALES, type PaperSize };
 
@@ -23,6 +27,8 @@ export interface PdfOptions {
   preparedBy: string;
   /** Add the Vaasthu orientation page (defaults to off). */
   includeVaasthu?: boolean;
+  /** Add two pages of elevations (N & S, E & W). */
+  includeElevations?: boolean;
 }
 
 const MARGIN = 10;
@@ -30,6 +36,55 @@ const TITLE_H = 26;
 const INK: [number, number, number] = [31, 42, 90];
 const GREY: [number, number, number] = [110, 116, 136];
 const LIGHT: [number, number, number] = [200, 205, 215];
+
+/** True when every character is in Latin-1, which jsPDF's built-in fonts can draw. */
+export function isLatin1(text: string): boolean {
+  return /^[\x00-\xFF]*$/.test(text);
+}
+
+/**
+ * Draw text that jsPDF cannot (e.g. Tamil): the browser shapes it on a canvas, which is placed as an
+ * image. Falls back to the built-in font (with "?" for unknown glyphs) where no canvas exists.
+ * Returns the width used, in mm.
+ */
+export function smartText(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  y: number,
+  opts: { size: number; color?: [number, number, number]; bold?: boolean; align?: 'left' | 'center' | 'right'; baseline?: 'alphabetic' | 'middle' } ,
+): number {
+  if (isLatin1(text) || typeof document === 'undefined') {
+    doc.setFontSize(opts.size);
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+    if (opts.color) doc.setTextColor(...opts.color);
+    doc.text(text, x, y, { align: opts.align, baseline: opts.baseline === 'middle' ? 'middle' : undefined });
+    const w = doc.getTextWidth(text);
+    doc.setFont('helvetica', 'normal');
+    return w;
+  }
+  const PX_PER_PT = 8;
+  const fontPx = opts.size * PX_PER_PT;
+  const canvas = document.createElement('canvas');
+  const g = canvas.getContext('2d')!;
+  const font = `${opts.bold ? '700' : '400'} ${fontPx}px "Noto Sans Tamil", "Atkinson Hyperlegible", system-ui, sans-serif`;
+  g.font = font;
+  const m = g.measureText(text);
+  canvas.width = Math.ceil(m.width + fontPx * 0.2);
+  canvas.height = Math.ceil(fontPx * 1.6);
+  g.font = font;
+  const [r, gg, b] = opts.color ?? [0, 0, 0];
+  g.fillStyle = `rgb(${r},${gg},${b})`;
+  g.textBaseline = 'alphabetic';
+  g.fillText(text, fontPx * 0.1, fontPx * 1.15);
+  const mmPerPx = (opts.size * 0.3528) / fontPx;
+  const wMm = canvas.width * mmPerPx;
+  const hMm = canvas.height * mmPerPx;
+  const left = opts.align === 'center' ? x - wMm / 2 : opts.align === 'right' ? x - wMm : x;
+  const top = opts.baseline === 'middle' ? y - hMm * 0.55 : y - 1.15 * fontPx * mmPerPx;
+  doc.addImage(canvas.toDataURL('image/png'), 'PNG', left, top, wMm, hMm);
+  return wMm;
+}
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
@@ -240,7 +295,8 @@ function titleBlock(
   doc.setTextColor(...INK);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
-  doc.text(doc.splitTextToSize(project.name, w * 0.5 - 4).slice(0, 2), x + 2, y + 9);
+  if (isLatin1(project.name)) doc.text(doc.splitTextToSize(project.name, w * 0.5 - 4).slice(0, 2), x + 2, y + 9);
+  else smartText(doc, project.name, x + 2, y + 9, { size: 9.5, bold: true, color: INK });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.text(drawingTitle, x + 2, y + 18.5);
@@ -350,12 +406,7 @@ function drawFloor(sh: Sheet, project: Project, floor: Floor, siteMode: boolean)
   for (const r of floor.rooms) {
     const [cr, cg, cb] = hexToRgb(ROOM_COLORS[r.type]);
     doc.setFillColor(cr, cg, cb);
-    const pts = [
-      { x: r.x, y: r.y },
-      { x: r.x + r.w, y: r.y },
-      { x: r.x + r.w, y: r.y + r.d },
-      { x: r.x, y: r.y + r.d },
-    ];
+    const pts = roomPolygon(r);
     if (r.type === 'garden' || r.type === 'pathway') {
       doc.setDrawColor(143, 165, 150);
       doc.setLineWidth(0.15);
@@ -364,7 +415,7 @@ function drawFloor(sh: Sheet, project: Project, floor: Floor, siteMode: boolean)
       doc.setLineDashPattern([], 0);
     } else sh.poly(pts, 'F');
 
-    if (r.type === 'staircase') {
+    if (r.type === 'staircase' && !isPolygonRoom(r)) {
       doc.setDrawColor(...GREY);
       doc.setLineWidth(0.12);
       const up = r.stairUp ?? 'N';
@@ -386,6 +437,19 @@ function drawFloor(sh: Sheet, project: Project, floor: Floor, siteMode: boolean)
     if (w) drawOpening(sh, w, o);
   }
 
+  // Furniture, fittings and outdoor items: light outline; wall-mounted units dashed.
+  doc.setLineWidth(0.12);
+  for (const it of floor.items ?? []) {
+    const c = catalogEntry(it.type);
+    const wallUnit = c.tags?.includes('wall-unit');
+    if (wallUnit) doc.setLineDashPattern([0.8, 0.6], 0);
+    const [ir, ig, ib] = hexToRgb(it.color ?? c.color);
+    doc.setDrawColor(...GREY);
+    doc.setFillColor(Math.round(255 - (255 - ir) * 0.35), Math.round(255 - (255 - ig) * 0.35), Math.round(255 - (255 - ib) * 0.35));
+    sh.poly(itemCorners(it), wallUnit ? 'S' : 'FD');
+    if (wallUnit) doc.setLineDashPattern([], 0);
+  }
+
   if (siteMode) {
     doc.setFillColor(...GREY);
     for (const w of project.siteWalls) sh.poly(wallPolygon(w), 'F');
@@ -397,9 +461,10 @@ function drawFloor(sh: Sheet, project: Project, floor: Floor, siteMode: boolean)
 
   // Labels
   for (const r of floor.rooms) {
-    const [cx, cy] = sh.P({ x: r.x + r.w / 2, y: r.y + r.d / 2 });
-    const wPaper = r.w / sh.denom;
-    const hPaper = r.d / sh.denom;
+    const lr = roomLabelRect(r);
+    const [cx, cy] = sh.P({ x: lr.x + lr.w / 2, y: lr.y + lr.d / 2 });
+    const wPaper = lr.w / sh.denom;
+    const hPaper = lr.d / sh.denom;
     doc.setTextColor(...INK);
     doc.setFont('helvetica', 'bold');
     let fs = 7.5;
@@ -408,12 +473,13 @@ function drawFloor(sh: Sheet, project: Project, floor: Floor, siteMode: boolean)
       fs -= 0.5;
       doc.setFontSize(fs);
     }
-    if (doc.getTextWidth(r.name) > wPaper - 1 || hPaper < 4) {
+    if ((isLatin1(r.name) && doc.getTextWidth(r.name) > wPaper - 1) || hPaper < 4) {
       doc.setFont('helvetica', 'normal');
       continue;
     }
-    const size = formatSize(r.w, r.d, unit).replace('×', 'x');
-    doc.text(r.name, cx, cy - (hPaper > 9 ? 1.2 : -1), { align: 'center' });
+    const size = isPolygonRoom(r) ? formatArea(roomArea(r), unit) : formatSize(r.w, r.d, unit).replace('×', 'x');
+    if (isLatin1(r.name)) doc.text(r.name, cx, cy - (hPaper > 9 ? 1.2 : -1), { align: 'center' });
+    else smartText(doc, r.name, cx, cy - (hPaper > 9 ? 1.2 : -1), { size: fs, bold: true, color: INK, align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(Math.min(6.5, fs));
     if (hPaper > 9 && doc.getTextWidth(size) < wPaper - 1) doc.text(size, cx, cy + 2.6, { align: 'center' });
@@ -578,6 +644,63 @@ export function buildPdf(project: Project, opts: PdfOptions): jsPDF {
 
   if (opts.includeSite) pages.push({ title: 'Site plan', draw: (p, n) => drawPlanPage('Site plan', null, true, p, n) });
   for (const f of floors) pages.push({ title: `${f.name} plan`, draw: (p, n) => drawPlanPage(`${f.name} plan`, f, false, p, n) });
+
+  if (opts.includeElevations && project.floors.some((f) => f.walls.length)) {
+    const parts = buildParts(project);
+    const elevs = (['N', 'E', 'S', 'W'] as Side[]).map((sd) => computeElevation(project, sd, parts));
+    // One scale for all four so they compare directly.
+    const maxW = Math.max(...elevs.map((e) => (e.h1 - e.h0) * 1000)) + 6000;
+    const maxH = Math.max(...elevs.map((e) => e.top * 1000)) + 3000;
+    const half = { w: area.w, d: (area.d - 10) / 2 };
+    const denom = chooseScale({ x: 0, y: 0, w: maxW, d: maxH }, half.w, half.d);
+    const drawElev = (e: Elevation, y0: number) => {
+      const wM = e.h1 - e.h0;
+      const ox = area.x + (area.w - (wM * 1000) / denom) / 2;
+      const groundY = y0 + half.d - 4;
+      const X = (h: number) => ox + ((h - e.h0) * 1000) / denom;
+      const Y = (v: number) => groundY - (v * 1000) / denom;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...INK);
+      doc.text(ELEVATION_TITLES[e.side], area.x, y0 + 3);
+      doc.setFont('helvetica', 'normal');
+      doc.setLineWidth(0.1);
+      doc.setDrawColor(43, 47, 58);
+      for (const shp of e.shapes) {
+        const [r, g, b] = hexToRgb(shp.color);
+        doc.setFillColor(r, g, b);
+        const pts = shp.pts.map(([h, v]) => [X(h), Y(v)]);
+        const deltas = pts.slice(1).map((q, i) => [q[0] - pts[i][0], q[1] - pts[i][1]]);
+        doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], 'FD', true);
+      }
+      doc.setLineWidth(0.4);
+      doc.line(area.x, groundY, area.x + area.w, groundY);
+      doc.setLineWidth(0.12);
+      doc.setFontSize(6);
+      doc.setTextColor(...GREY);
+      for (const l of e.levels) {
+        doc.setDrawColor(...GREY);
+        doc.line(X(e.h1) + 2, Y(l.v), X(e.h1) + 8, Y(l.v));
+        doc.text(`+${formatLength(l.v * 1000, project.settings.unit)} ${l.label}`, X(e.h1) + 9, Y(l.v) + 0.8);
+      }
+      doc.setTextColor(...INK);
+      doc.text(`Top +${formatLength(e.top * 1000, project.settings.unit)}`, X(e.h1) + 9, Y(e.top) + 0.8);
+      doc.setDrawColor(...GREY);
+      doc.line(X(e.h0), groundY + 3, X(e.h1), groundY + 3);
+      doc.text(formatLength(wM * 1000, project.settings.unit), (X(e.h0) + X(e.h1)) / 2, groundY + 2.4, { align: 'center' });
+    };
+    const elevPage = (a: Elevation, b: Elevation, title: string) => (page: number, total: number) => {
+      frame(doc, paper);
+      drawElev(a, area.y);
+      drawElev(b, area.y + half.d + 10);
+      doc.setFontSize(6);
+      doc.setTextColor(...GREY);
+      doc.text('Simplified elevations generated from the 3D model, for discussion only — not for construction.', paper.w - MARGIN - 2, area.y + 2, { align: 'right' });
+      titleBlock(doc, paper, project, opts, title, `1:${denom} on ${opts.paper.toUpperCase()}`, page, total);
+    };
+    pages.push({ title: 'North and south elevations', draw: elevPage(elevs[0], elevs[2], 'North and south elevations') });
+    pages.push({ title: 'East and west elevations', draw: elevPage(elevs[1], elevs[3], 'East and west elevations') });
+  }
 
   if (opts.includeVaasthu) {
     pages.push({ title: 'Vaasthu orientation', draw: (p, n) => drawVaasthuPage(p, n) });

@@ -1,4 +1,5 @@
 import { polygonArea, type Rect } from './geometry';
+import { roomRects } from './roomShape';
 import { OUTDOOR_ROOM_TYPES } from './types';
 import type { Floor, Project, Room, RoomType } from './types';
 
@@ -57,10 +58,10 @@ export function floorAreas(floor: Floor): FloorAreas {
   const outdoor = floor.rooms.filter((r) => OUTDOOR_ROOM_TYPES.includes(r.type));
   const coverage = floor.rooms.filter((r) => !NON_COVERAGE_TYPES.includes(r.type));
   return {
-    enclosedMm2: unionArea(enclosed),
-    porticoStairMm2: unionArea(ps),
-    outdoorMm2: unionArea(outdoor),
-    coverageMm2: unionArea(coverage),
+    enclosedMm2: unionArea(enclosed.flatMap(roomRects)),
+    porticoStairMm2: unionArea(ps.flatMap(roomRects)),
+    outdoorMm2: unionArea(outdoor.flatMap(roomRects)),
+    coverageMm2: unionArea(coverage.flatMap(roomRects)),
   };
 }
 

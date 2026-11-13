@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, defaultFinishes, defaultRoof, defaultVaasthu, newId } from '../model/factory';
+import { DEFAULT_SETTINGS, defaultExterior, defaultFinishes, defaultRoof, defaultVaasthu, newId } from '../model/factory';
 import { ensureClockwise } from '../model/geometry';
 import { SCHEMA_VERSION, type Project } from '../model/types';
 
@@ -30,6 +30,7 @@ export function migrateProject(raw: unknown): Project {
     revision: p.revision ?? 1,
     settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
     plot: { ...p.plot, boundary: ensureClockwise(p.plot.boundary) },
+    floors: (p.floors ?? []).map((f) => ({ ...f, items: f.items ?? [] })),
     siteWalls: p.siteWalls ?? [],
     siteOpenings: p.siteOpenings ?? [],
     footprint: p.footprint ?? null,
@@ -37,6 +38,7 @@ export function migrateProject(raw: unknown): Project {
     finishes: { ...defaultFinishes(), ...(p.finishes ?? {}) },
     roof: { ...defaultRoof(), ...(p.roof ?? {}) },
     underlays: p.underlays ?? [],
+    exterior: { ...defaultExterior(), ...(p.exterior ?? {}) },
     schemaVersion: SCHEMA_VERSION,
   };
 }

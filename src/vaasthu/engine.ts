@@ -1,6 +1,7 @@
 import { produce } from 'immer';
 import { boundingBox, pointAlongWall, rectOverlapArea, wallLength, zoneOf, type Rect } from '../model/geometry';
 import { SITE_ROOM_TYPES } from '../model/footprint';
+import { roomArea, roomCentre, roomRects } from '../model/roomShape';
 import { roomGetsWalls } from '../model/wallBuilder';
 import type { Floor, Opening, Point, Project, Room, RoomType, Wall, ZoneId, ZoneRating } from '../model/types';
 import { CENTRE_AVOID, PLOT_GRID_TARGETS, RULE_TEXT, ruleTargetFor, ZONE_IDS, type RuleTarget } from './rules';
@@ -118,11 +119,11 @@ export function evaluate(project: Project): VaasthuReport {
     for (const r of floor.rooms) {
       const target = ruleTargetFor(r.type);
       if (target) {
-        judge(target, { x: r.x + r.w / 2, y: r.y + r.d / 2 }, { elementId: r.id, elementKind: 'room', floorId: floor.id, name: r.name });
+        judge(target, roomCentre(r), { elementId: r.id, elementKind: 'room', floorId: floor.id, name: r.name });
       }
       if (project.vaasthu.keepCentreOpen && CENTRE_AVOID.includes(r.type) && !SITE_ROOM_TYPES.includes(r.type)) {
-        const ov = rectOverlapArea(r, centre);
-        if (ov > 0.25 * Math.min(r.w * r.d, centre.w * centre.d)) centreIssues.push({ elementId: r.id, floorId: floor.id, name: r.name });
+        const ov = roomRects(r).reduce((s, x) => s + rectOverlapArea(x, centre), 0);
+        if (ov > 0.25 * Math.min(roomArea(r), centre.w * centre.d)) centreIssues.push({ elementId: r.id, floorId: floor.id, name: r.name });
       }
     }
   }
@@ -170,8 +171,8 @@ export interface SwapSuggestion {
 function compatible(a: Room, b: Room): boolean {
   if (a.type === b.type) return false;
   if (!SWAPPABLE.includes(a.type) || !SWAPPABLE.includes(b.type)) return false;
-  const areaA = a.w * a.d;
-  const areaB = b.w * b.d;
+  const areaA = roomArea(a);
+  const areaB = roomArea(b);
   const ratio = areaA / areaB;
   if (ratio < 0.6 || ratio > 1 / 0.6) return false;
   // Both rooms must still be usable: shortest side of each within 70% of the other's.
@@ -246,7 +247,7 @@ export function itemPoint(project: Project, item: VaasthuItem): Point | null {
   if (!floor) return null;
   if (item.elementKind === 'room') {
     const r = floor.rooms.find((x) => x.id === item.elementId);
-    return r ? { x: r.x + r.w / 2, y: r.y + r.d / 2 } : null;
+    return r ? roomCentre(r) : null;
   }
   const o = floor.openings.find((x) => x.id === item.elementId);
   const w = o && floor.walls.find((x) => x.id === o.wallId);

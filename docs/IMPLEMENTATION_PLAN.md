@@ -80,9 +80,16 @@ docs/           this plan, user guide notes
 - Tamil UI. Note: jsPDF's built-in fonts cannot render Tamil, and Tamil needs complex text shaping;
   Tamil in PDFs needs an embedded font plus a shaping-capable approach, to be verified before promising it.
 
-### Phase 3 — Interior and exterior design
-Kitchen designer (L / U / straight / parallel, clearances), bathroom designer, furniture library,
-exterior elevations, landscaping.
+### Phase 3 — Interior and exterior design (delivered)
+- Carried over from earlier phases and completed first: offline PWA, material textures, walk-through
+  and drag editing in 3D, Tamil text in PDFs, irregular rooms, Tamil interface switch, Tamil Nadu
+  setback preset (with source and caution).
+- Furniture / fittings / outdoor item library on the same model (`floor.items`), drawn in 2D, 3D, PDF.
+- Kitchen designer (`src/design/kitchen.ts`) and bathroom designer (`src/design/bathroom.ts`):
+  generators plus checks that also run on hand-placed items.
+- Elevations (`src/model/elevation.ts`): the 3D parts projected orthographically per side; style
+  presets (`src/model/styles.ts`) with sunshades and floor bands; elevation pages in the PDF.
+- Landscaping: garden / pathway areas plus outdoor items (trees, shrubs, lights, bench, swing, cars).
 
 ### Phase 4 — Engineering layers
 Electrical (points, circuits, conduits, preliminary loads), plumbing (supply, hot / cold, sump,
@@ -103,7 +110,6 @@ cloud sync / collaboration, and any server-side rendering.
 
 ## 5. What is deliberately not included yet
 
-- **Local building-regulation presets.** Setbacks, coverage and height limits vary by authority and plot
-  size (e.g. Tamil Nadu's rules), and I have not verified current values. The app provides editable
-  custom limits only; presets should be added from the official, current rule text.
-- Vaasthu rules, 3D, materials, MEP layers, costs, AI — see phases above.
+- **Building-regulation presets beyond Tamil Nadu rule 35 Table E.** The one preset included cites its
+  source and version; later amendments are not verified. Other authorities: enter limits by hand.
+- MEP layers, costs, AI, 4D — see phases above.

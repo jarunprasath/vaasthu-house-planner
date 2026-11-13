@@ -72,7 +72,22 @@ export function DimensionLine({
   );
 }
 
-export function RoomLabel({ room, unit, scale, color }: { room: Room; unit: DisplayUnit; scale: number; color: string }) {
+export function RoomLabel({
+  room,
+  unit,
+  scale,
+  color,
+  areaMm2,
+  sizeText,
+}: {
+  room: Room;
+  unit: DisplayUnit;
+  scale: number;
+  color: string;
+  areaMm2?: number;
+  /** Replaces the W × D line (e.g. for irregular rooms). */
+  sizeText?: string;
+}) {
   // Try the full name at 12px, then at 10px, then the short type name; hide if nothing fits.
   const candidates: [string, number][] = [
     [room.name, 12],
@@ -87,7 +102,7 @@ export function RoomLabel({ room, unit, scale, color }: { room: Room; unit: Disp
   const [name, basePx] = pick;
   const fs = px(basePx, scale);
   const small = px(Math.min(10.5, basePx - 0.5), scale);
-  const size = formatSize(room.w, room.d, unit);
+  const size = sizeText ?? formatSize(room.w, room.d, unit);
   const fitsSize = room.w > small * size.length * 0.52 && room.d > fs * 3.2;
   const fitsArea = room.d > fs * 4.6;
   const lines = 1 + (fitsSize ? 1 : 0) + (fitsArea ? 1 : 0);
@@ -123,7 +138,7 @@ export function RoomLabel({ room, unit, scale, color }: { room: Room; unit: Disp
       )}
       {fitsArea && (
         <Text
-          text={formatArea(room.w * room.d, unit)}
+          text={formatArea(areaMm2 ?? room.w * room.d, unit)}
           x={0}
           y={top + fs * 1.25 + small * 1.3}
           width={room.w}

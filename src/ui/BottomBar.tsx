@@ -4,10 +4,12 @@ import { useCursorStore } from '../store/cursorStore';
 import { useProjectStore } from '../store/projectStore';
 import { useUiStore } from '../store/uiStore';
 import { Icon } from './icons';
+import { useT } from '../i18n';
 
 export function BottomBar() {
   const s = useProjectStore();
   const ui = useUiStore();
+  const t = useT();
   const cursor = useCursorStore((c) => c.p);
   const unit = s.project.settings.unit;
   const floors = [...s.project.floors].sort((a, b) => a.level - b.level);
@@ -40,7 +42,7 @@ export function BottomBar() {
           </button>
         ))}
         <button onClick={s.addFloor} className="flex items-center gap-1 rounded-md px-2 py-1 text-ink-soft hover:bg-ochre-soft" title="Add an empty floor above">
-          <Icon name="plus" size={14} /> Floor
+          <Icon name="plus" size={14} /> {t('Floor')}
         </button>
       </nav>
 
@@ -49,7 +51,7 @@ export function BottomBar() {
           {cursor ? `${formatLength(cursor.x, unit)} E, ${formatLength(cursor.y, unit)} S` : ''}
         </span>
         <label className="flex items-center gap-1 text-xs text-muted">
-          Units
+          {t('Units')}
           <select
             className={sel}
             value={unit}
@@ -70,7 +72,7 @@ export function BottomBar() {
           </select>
         </label>
         <label className="flex items-center gap-1 text-xs text-muted">
-          Snap
+          {t('Snap')}
           <select
             className={sel}
             value={String(s.project.settings.snapMm)}

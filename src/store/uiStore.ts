@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { RoomType } from '../model/types';
 
-export type Tool = 'select' | 'pan' | 'room' | 'wall' | 'door' | 'window' | 'gate' | 'measure' | 'plot';
+export type Tool = 'select' | 'pan' | 'room' | 'wall' | 'door' | 'window' | 'gate' | 'measure' | 'plot' | 'item';
 
 export interface ViewTransform {
   /** Screen pixels per millimetre. */
@@ -15,6 +15,8 @@ export interface ViewTransform {
 interface UiState {
   tool: Tool;
   roomType: RoomType;
+  /** Catalogue item placed by the item tool. */
+  itemType: string;
   view: ViewTransform;
   showGrid: boolean;
   showDimensions: boolean;
@@ -33,10 +35,11 @@ interface UiState {
   rightOpen: boolean;
   /** Request the canvas to fit the plot into view (incremented to trigger). */
   fitRequest: number;
-  dialog: null | 'projects' | 'plot' | 'export' | 'help' | 'compound' | 'vaasthuRules' | 'finishes' | 'importPlan';
+  dialog: null | 'projects' | 'plot' | 'export' | 'help' | 'compound' | 'vaasthuRules' | 'finishes' | 'importPlan' | 'kitchen' | 'bathroom' | 'elevations';
 
   setTool: (t: Tool) => void;
   setRoomType: (t: RoomType) => void;
+  setItemType: (t: string) => void;
   setView: (v: ViewTransform) => void;
   toggle: (key: 'showGrid' | 'showDimensions' | 'showZones' | 'showSetbacks' | 'showFloorBelow' | 'showSixteen') => void;
   setLang: (l: 'en' | 'ta') => void;
@@ -53,6 +56,7 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       tool: 'select',
       roomType: 'bedroom',
+      itemType: 'sofa3',
       view: { scale: 0.05, x: 40, y: 40 },
       showGrid: true,
       showDimensions: true,
@@ -72,6 +76,7 @@ export const useUiStore = create<UiState>()(
 
       setTool: (tool) => set({ tool }),
       setRoomType: (roomType) => set({ roomType }),
+      setItemType: (itemType) => set({ itemType }),
       setView: (view) => set({ view }),
       toggle: (key) => set((s) => ({ [key]: !s[key] }) as Partial<UiState>),
       setTheme: (theme) => set({ theme }),

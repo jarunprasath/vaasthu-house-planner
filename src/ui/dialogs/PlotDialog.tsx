@@ -1,5 +1,7 @@
 import { plotArea } from '../../model/areas';
+import { useState } from 'react';
 import { rectangularBoundary, SIDE_NAMES } from '../../model/factory';
+import { tamilNaduRule35, TN_SOURCE, type AreaType } from '../../model/regulations';
 import { boundingBox } from '../../model/geometry';
 import { formatArea, formatLength } from '../../model/units';
 import type { Side } from '../../model/types';
@@ -8,6 +10,65 @@ import { useUiStore } from '../../store/uiStore';
 import { Button, Check, Dialog, Field, LengthInput, NumberInput, Select } from '../fields';
 
 const SIDES: Side[] = ['N', 'E', 'S', 'W'];
+
+function RegulationPreset() {
+  const project = useProjectStore((s) => s.project);
+  const commit = useProjectStore((s) => s.commit);
+  const [areaType, setAreaType] = useState<AreaType>('other');
+  const [result, setResult] = useState<ReturnType<typeof tamilNaduRule35> | null>(null);
+  const unit = project.settings.unit;
+  const box = boundingBox(project.plot.boundary);
+  const main = [...project.plot.roads].sort((a, b) => b.widthMm - a.widthMm)[0];
+  // Plot width is measured along the main road's frontage.
+  const plotWidth = main ? (main.side === 'N' || main.side === 'S' ? box.w : box.d) : Math.min(box.w, box.d);
+  const height = project.floors.filter((f) => f.walls.length > 0).reduce((s, f) => s + f.heightMm, 0) || project.floors[0]?.heightMm || 3048;
+  return (
+    <div className="space-y-2 rounded-md border border-line p-2.5">
+      <p className="text-xs font-bold text-ink">Fill from a regulation (optional)</p>
+      <p className="text-xs text-muted">
+        Tamil Nadu: {TN_SOURCE.title}, {TN_SOURCE.version}.{' '}
+        <a className="underline" href={TN_SOURCE.url} target="_blank" rel="noreferrer">
+          Source
+        </a>
+      </p>
+      <Field label="Area type">
+        <Select<AreaType>
+          value={areaType}
+          onChange={setAreaType}
+          options={[
+            { value: 'other', label: 'Other areas (most plots)' },
+            { value: 'ews', label: 'Economically weaker section (EWS) area' },
+            { value: 'continuous', label: 'Continuous building area' },
+          ]}
+        />
+      </Field>
+      <p className="text-xs text-ink-soft">
+        Uses: {project.plot.roads.length ? project.plot.roads.map((r) => `${SIDE_NAMES[r.side].toLowerCase()} road ${formatLength(r.widthMm, unit)}`).join(', ') : 'no road set'}; plot width along the
+        main road {formatLength(plotWidth, unit)}; building height {formatLength(height, unit)}.
+      </p>
+      <Button
+        onClick={() => {
+          const r = tamilNaduRule35({ areaType, roads: project.plot.roads, plotWidthMm: plotWidth, heightMm: height });
+          setResult(r);
+          if (r.applicable)
+            commit((d) => {
+              d.plot.setbacks = r.setbacks;
+            });
+        }}
+      >
+        Fill setbacks
+      </Button>
+      {result && (
+        <ul className="list-disc space-y-0.5 pl-4 text-xs text-ink-soft">
+          {result.notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-warn">{TN_SOURCE.caution} These are minimums; your plan can keep more open space.</p>
+    </div>
+  );
+}
 
 export function PlotDialog({ onClose }: { onClose: () => void }) {
   const project = useProjectStore((s) => s.project);
@@ -104,10 +165,7 @@ export function PlotDialog({ onClose }: { onClose: () => void }) {
               </Field>
             ))}
           </div>
-          <p className="text-xs text-muted">
-            Enter the setbacks your local authority requires. Rules depend on the authority, plot size and road width, so
-            this app has no built-in rule presets yet — please check the current rules for your area.
-          </p>
+          <RegulationPreset />
         </div>
 
         <div className="space-y-3">

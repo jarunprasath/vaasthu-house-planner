@@ -96,13 +96,47 @@ is built and tested; nothing in the app is a placeholder.
   gate on the west road and a pedestrian gate on the east road).
 - A 1BHK on a 30′ × 40′ plot, and a blank plot.
 
+**Furniture, kitchen and bathroom design (Phase 3)**
+- Furniture and fittings list (living, bedroom, dining, kitchen, bathroom, pooja & study, outdoor /
+  garden items such as cars, trees, tulsi maadam, swing). Pick one, click on the plan; `R` turns it,
+  arrow keys nudge it; size, colour and height are editable. Items appear in 3D and in the PDF plans.
+  Catalogue sizes are typical sizes — set them to the product you actually buy.
+- Kitchen designer (select a kitchen → “Design this kitchen…”): straight, L, U, parallel or island
+  layout with sink, hob, refrigerator, chimney, wall cabinets, optional dishwasher, cabinet and
+  counter colours. Checks: work triangle, walkway width, sink–hob spacing, hob under a window,
+  door swing, ventilation, and the direction the cook faces (Vaasthu).
+- Bathroom designer: Western or Indian toilet, shower area or bathtub, basin with mirror, geyser,
+  exhaust fan, floor drain. Checks: toilet side and front clearances, ventilation, door swing,
+  waterproofing reminder, and the direction the toilet user faces (Vaasthu).
+- The planning numbers in these checks are common rules of thumb (NKBA-style guidelines), stated as
+  approximate in the app. They are not regulations.
+
+**Elevations and exterior style (Phase 3)**
+- North, east, south and west elevations generated from the 3D model, with level marks and overall
+  width and height; optional elevation pages in the PDF set.
+- Style presets — modern, traditional South Indian, contemporary, villa — that set wall and roof
+  colours, roof type, sunshades (chajjas) over windows and doors, and floor bands. Everything a preset
+  sets stays editable.
+
+**3D extras**
+- Walk through the house (arrow keys / W A S D, on-screen buttons on touch screens; walls do not
+  block you), drag rooms, walls and furniture in 3D, procedural material textures.
+
+**Other**
+- Works offline after the first visit and can be installed as an app (PWA).
+- Irregular (L-shaped or free-corner) rooms.
+- Tamil interface switch (தமிழ் / English) for menus, tools, panels and main dialogs; Tamil text
+  prints correctly in PDFs. Generated check messages, help text and some dialogs are still English.
+  The Tamil wording has not been reviewed by a native-speaking professional.
+- Optional Tamil Nadu setback preset (TNCDBR 2019, rule 35 Table E as amended to January 2020) in
+  Plot settings, with its source and a caution: later amendments may have changed the values, so
+  confirm with your local planning authority.
+
 ## Not built yet
 
-First-person walkthrough and editing in 3D; textures; full Tamil interface (Vaasthu explanations are in
-Tamil already); Tamil text in PDFs; kitchen, bathroom and furniture designers; elevations; electrical, plumbing and drainage
-layers; cost estimates; AI assistant; 4D construction timeline; DXF / GLB / IFC export; cloud accounts;
-offline (PWA) install. Building-regulation presets are deliberately not included until they can be
-taken from current official rules — enter your authority’s setbacks and limits yourself.
+Electrical, plumbing and drainage layers; cost estimates; AI assistant; 4D construction timeline;
+DXF / GLB / IFC export; cloud accounts. Walk-through has no collision with walls. The kitchen and
+bathroom designers work on the room's overall rectangle, so check the result in irregular rooms.
 
 ## Run it locally
 

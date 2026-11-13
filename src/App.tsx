@@ -1,3 +1,6 @@
+import { translate } from './i18n';
+import { BathroomDialog, KitchenDialog } from './ui/dialogs/DesignDialogs';
+import { ElevationsDialog } from './ui/dialogs/ElevationsDialog';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type Konva from 'konva';
 import { PlanCanvas } from './editor/PlanCanvas';
@@ -75,6 +78,8 @@ export default function App() {
       if (mod && k === 's') return e.preventDefault(), void saveNow();
       if (mod && k === 'd') return e.preventDefault(), s.duplicateSelection();
       if (mod) return;
+      // In 3D the letter keys are used for walking, so tool shortcuts are off there.
+      if (useUiStore.getState().viewMode === '3d' && !['Delete', 'Backspace', 'Escape'].includes(e.key)) return;
       if (e.key === 'Delete' || e.key === 'Backspace') return e.preventDefault(), s.deleteSelection();
       if (e.key === 'Escape') {
         s.select(null);
@@ -88,7 +93,23 @@ export default function App() {
         if (d) s.moveHouse(d[0], d[1]);
         return;
       }
-      if (k === 'r') return s.rotateSelectedRoom();
+      if (s.selection?.kind === 'item' && e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        const it = s.project.floors.flatMap((f) => f.items).find((x) => x.id === s.selection!.id);
+        const step = (s.project.settings.snapMm || 50) * (e.shiftKey ? 4 : 1);
+        const d = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] }[e.key];
+        if (it && d && !it.locked) s.updateItem(it.id, { x: it.x + d[0], y: it.y + d[1] });
+        return;
+      }
+      if (k === 'r') {
+        if (useUiStore.getState().tool === 'item') return; // the canvas turns the item being placed
+        if (s.selection?.kind === 'item') {
+          const it = s.project.floors.flatMap((f) => f.items).find((x) => x.id === s.selection!.id);
+          if (it && !it.locked) s.updateItem(it.id, { rotation: (it.rotation + (e.shiftKey ? 270 : 90)) % 360 });
+          return;
+        }
+        return s.rotateSelectedRoom();
+      }
       if (k === 'l') return s.toggleLockSelection();
       if (k === 'f') return useUiStore.getState().requestFit();
       if (e.key === '+' || e.key === '=' || e.key === '-') {
@@ -139,7 +160,7 @@ export default function App() {
                 onClick={() => ui.setViewMode(m)}
                 className={`px-3 py-1.5 ${ui.viewMode === m ? 'bg-ink text-panel' : 'text-ink-soft hover:bg-ochre-soft'}`}
               >
-                {m === '2d' ? '2D plan' : '3D view'}
+                {translate(ui.lang, m === '2d' ? '2D plan' : '3D view')}
               </button>
             ))}
           </div>
@@ -168,6 +189,9 @@ export default function App() {
       {ui.dialog === 'vaasthuRules' && <VaasthuRulesDialog onClose={close} />}
       {ui.dialog === 'finishes' && <FinishesDialog onClose={close} />}
       {ui.dialog === 'importPlan' && <ImportPlanDialog onClose={close} />}
+      {ui.dialog === 'kitchen' && <KitchenDialog onClose={close} />}
+      {ui.dialog === 'bathroom' && <BathroomDialog onClose={close} />}
+      {ui.dialog === 'elevations' && <ElevationsDialog onClose={close} />}
     </div>
   );
 }

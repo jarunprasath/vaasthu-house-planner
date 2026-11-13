@@ -3,9 +3,11 @@ import { useUiStore } from '../store/uiStore';
 import type { SaveState } from '../useAutosave';
 import { Button } from './fields';
 import { Icon } from './icons';
+import { useT } from '../i18n';
 
 export function TopBar({ saveState, onSave }: { saveState: SaveState; onSave: () => void }) {
   const ui = useUiStore();
+  const t = useT();
   const name = useProjectStore((s) => s.project.name);
   const canUndo = useProjectStore((s) => s.past.length > 0);
   const canRedo = useProjectStore((s) => s.future.length > 0);
@@ -14,11 +16,11 @@ export function TopBar({ saveState, onSave }: { saveState: SaveState; onSave: ()
 
   const saveText =
     saveState.status === 'saving'
-      ? 'Saving…'
+      ? t('Saving…')
       : saveState.status === 'error'
-        ? 'Not saved'
+        ? t('Not saved')
         : saveState.at
-          ? `Saved ${saveState.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          ? `${t('Saved')} ${saveState.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
           : '';
 
   return (
@@ -41,11 +43,11 @@ export function TopBar({ saveState, onSave }: { saveState: SaveState; onSave: ()
 
       <div className="ml-auto flex min-w-0 items-center gap-0.5 overflow-x-auto sm:gap-1">
         <Button variant="ghost" onClick={() => ui.openDialog('projects')} title="Projects & templates">
-          <Icon name="folder" /> <span className="hidden md:inline">Projects</span>
+          <Icon name="folder" /> <span className="hidden md:inline">{t('Projects')}</span>
         </Button>
         <span className="hidden sm:contents">
           <Button variant="ghost" onClick={onSave} title="Save now (Ctrl+S)">
-            <Icon name="save" /> <span className="hidden md:inline">Save</span>
+            <Icon name="save" /> <span className="hidden md:inline">{t('Save')}</span>
           </Button>
         </span>
         <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
@@ -57,11 +59,19 @@ export function TopBar({ saveState, onSave }: { saveState: SaveState; onSave: ()
         </Button>
         <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
         <Button variant="ghost" onClick={() => ui.openDialog('plot')} title="Plot settings">
-          <Icon name="plot" /> <span className="hidden md:inline">Plot</span>
+          <Icon name="plot" /> <span className="hidden md:inline">{t('Plot')}</span>
         </Button>
         <Button variant="primary" onClick={() => ui.openDialog('export')} title="Export & print">
-          <Icon name="export" /> <span className="hidden sm:inline">Export</span>
+          <Icon name="export" /> <span className="hidden sm:inline">{t('Export')}</span>
         </Button>
+<button
+          className="rounded-md border border-line px-2 py-1 text-xs text-ink hover:border-ink-soft"
+          onClick={() => ui.setLang(ui.lang === 'ta' ? 'en' : 'ta')}
+          title="Language / மொழி"
+          aria-label="Switch language"
+        >
+          {ui.lang === 'ta' ? 'English' : 'தமிழ்'}
+        </button>
 <span className="hidden sm:contents">
         <Button
           variant="ghost"

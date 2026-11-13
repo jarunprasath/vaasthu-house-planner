@@ -1,5 +1,6 @@
 import { boundingBox, insetPolygon, pointInPolygon, pointInRect, polygonArea, type Rect } from './geometry';
 import type { Footprint, Point, Project, RoomType, Side } from './types';
+import { roomCentre } from './roomShape';
 
 /** Open site elements that never move with the house. */
 export const SITE_ROOM_TYPES: RoomType[] = ['garden', 'pathway', 'parking', 'sump', 'septic_tank', 'borewell'];
@@ -80,20 +81,22 @@ export function openLandArea(project: Project): number {
 }
 
 /** Ids of rooms and walls (on every floor) that belong to the house, i.e. lie inside its outline. */
-export function houseContents(project: Project, f: Rect): { rooms: Set<string>; walls: Set<string> } {
+export function houseContents(project: Project, f: Rect): { rooms: Set<string>; walls: Set<string>; items: Set<string> } {
   const rooms = new Set<string>();
   const walls = new Set<string>();
+  const items = new Set<string>();
   for (const floor of project.floors) {
     for (const r of floor.rooms) {
       if (SITE_ROOM_TYPES.includes(r.type)) continue;
-      if (pointInRect({ x: r.x + r.w / 2, y: r.y + r.d / 2 }, f, 1)) rooms.add(r.id);
+      if (pointInRect(roomCentre(r), f, 1)) rooms.add(r.id);
     }
+    for (const it of floor.items ?? []) if (pointInRect({ x: it.x, y: it.y }, f, 1)) items.add(it.id);
     for (const w of floor.walls) {
       const tol = w.thicknessMm / 2 + 1;
       if (pointInRect(w.a, f, tol) && pointInRect(w.b, f, tol)) walls.add(w.id);
     }
   }
-  return { rooms, walls };
+  return { rooms, walls, items };
 }
 
 /**

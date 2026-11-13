@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
+import { isPolygonRoom, lShapeOf, roomArea, roomCentre } from '../model/roomShape';
 import { clearances, defaultFootprint, openLandArea } from '../model/footprint';
 import { floorAreas, groundCoveragePercent, plotArea } from '../model/areas';
 import { SIDE_NAMES } from '../model/factory';
-import { boundingBox, rectCenter, wallDir, wallLength, zoneOf, ZONE_LABELS } from '../model/geometry';
+import { boundingBox, rectCorners, wallDir, wallLength, zoneOf, ZONE_LABELS } from '../model/geometry';
 import { formatArea, formatLength } from '../model/units';
 import { ROOM_TYPE_LABELS, WALL_MATERIAL_LABELS } from '../model/types';
-import type { Opening, Project, Room, RoomType, Side, Wall, WallKind, WallMaterial } from '../model/types';
+import type { Item, Opening, Project, Room, RoomType, Side, Wall, WallKind, WallMaterial } from '../model/types';
+import { catalogEntry } from '../model/catalog';
 import { activeFloor, useProjectStore } from '../store/projectStore';
 import { validateProject, type Issue } from '../validation/validate';
 import { Button, Check, Field, LengthInput, Section, Select, TextInput } from './fields';
@@ -15,6 +17,7 @@ import { ZONE_NAMES } from '../vaasthu/rules';
 import { VaasthuPanel } from './VaasthuPanel';
 import { FLOOR_FINISHES, floorFinish } from '../model/finishes';
 import { Icon } from './icons';
+import { useT } from '../i18n';
 
 export function PropertiesPanel() {
   const project = useProjectStore((s) => s.project);
@@ -37,6 +40,9 @@ export function PropertiesPanel() {
     const o = (site ? project.siteOpenings : floor.openings).find((x) => x.id === selection.id);
     const w = o && (site ? project.siteWalls : floor.walls).find((x) => x.id === o.wallId);
     if (o && w) body = <OpeningProps opening={o} wall={w} site={site} project={project} />;
+  } else if (selection?.kind === 'item') {
+    const it = floor.items.find((x) => x.id === selection.id);
+    if (it) body = <ItemProps item={it} project={project} />;
   }
 
   return <div className="flex h-full flex-col overflow-y-auto">{body ?? <Tabs project={project} />}</div>;
@@ -45,6 +51,7 @@ export function PropertiesPanel() {
 function Tabs({ project }: { project: Project }) {
   const tab = useUiStore((s) => s.panelTab);
   const setTab = useUiStore((s) => s.setPanelTab);
+  const t = useT();
   return (
     <>
       <div className="sticky top-0 z-10 flex border-b border-line bg-panel" role="tablist">
@@ -61,7 +68,7 @@ function Tabs({ project }: { project: Project }) {
             onClick={() => setTab(id)}
             className={`flex-1 px-3 py-2.5 text-sm ${tab === id ? 'border-b-2 border-ochre font-bold text-ink' : 'text-ink-soft'}`}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -94,9 +101,10 @@ function ElementActions({ locked, rotate }: { locked: boolean; rotate?: boolean 
 
 function BackLink() {
   const select = useProjectStore((s) => s.select);
+  const t = useT();
   return (
     <button className="px-4 pt-3 text-left text-sm text-ink-soft underline-offset-2 hover:underline" onClick={() => select(null)}>
-      ← Overview & checks
+      {t('← Overview & checks')}
     </button>
   );
 }
@@ -127,11 +135,103 @@ function RoomVaasthu({ room, project }: { room: Room; project: Project }) {
   );
 }
 
+function RoomDesign({ room }: { room: Room }) {
+  const open = useUiStore((s) => s.openDialog);
+  const kind = room.type === 'kitchen' ? 'kitchen' : room.type === 'bathroom' || room.type === 'toilet' ? 'bathroom' : null;
+  if (!kind) return null;
+  return (
+    <Button className="w-full" variant="primary" onClick={() => open(kind)}>
+      {kind === 'kitchen' ? 'Design this kitchen…' : 'Design this bathroom…'}
+    </Button>
+  );
+}
+
+const ITEM_COLOURS = ['#7b5537', '#a37b55', '#5f4632', '#d9d4c7', '#f2f2f0', '#8a7a6a', '#4b5d4f', '#2e3a52', '#8a8d92', '#b9a48c'];
+
+function ItemProps({ item, project }: { item: Item; project: Project }) {
+  const update = useProjectStore((s) => s.updateItem);
+  const unit = project.settings.unit;
+  const c = catalogEntry(item.type);
+  const dis = item.locked;
+  const box = boundingBox(project.plot.boundary);
+  const zone = zoneOf({ x: item.x, y: item.y }, box);
+  const faces = (['south', 'west', 'north', 'east'] as const)[((Math.round(item.rotation / 90) % 4) + 4) % 4];
+  return (
+    <>
+      <BackLink />
+      <Section title={c.label}>
+        <Field label="Label (optional)">
+          <TextInput value={item.label ?? ''} disabled={dis} onCommit={(label) => update(item.id, { label: label || undefined })} ariaLabel="Item label" />
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Width">
+            <LengthInput valueMm={item.w} unit={unit} min={50} disabled={dis} onCommit={(w) => update(item.id, { w })} ariaLabel="Item width" />
+          </Field>
+          <Field label="Depth">
+            <LengthInput valueMm={item.d} unit={unit} min={20} disabled={dis} onCommit={(d) => update(item.id, { d })} ariaLabel="Item depth" />
+          </Field>
+          <Field label="Height">
+            <LengthInput valueMm={item.h} unit={unit} min={10} disabled={dis} onCommit={(h) => update(item.id, { h })} ariaLabel="Item height" />
+          </Field>
+          <Field label="Above floor">
+            <LengthInput valueMm={item.elevationMm ?? 0} unit={unit} min={0} disabled={dis} onCommit={(elevationMm) => update(item.id, { elevationMm: elevationMm || undefined })} ariaLabel="Height above floor" />
+          </Field>
+          <Field label="From west boundary">
+            <LengthInput valueMm={item.x} unit={unit} min={-1e9} disabled={dis} onCommit={(x) => update(item.id, { x })} ariaLabel="Item X" />
+          </Field>
+          <Field label="From north boundary">
+            <LengthInput valueMm={item.y} unit={unit} min={-1e9} disabled={dis} onCommit={(y) => update(item.id, { y })} ariaLabel="Item Y" />
+          </Field>
+        </div>
+        <Field label="Turn">
+          <Select
+            value={String(((Math.round(item.rotation / 90) % 4) + 4) % 4 * 90)}
+            disabled={dis}
+            options={[
+              { value: '0', label: 'Front faces south' },
+              { value: '90', label: 'Front faces west' },
+              { value: '180', label: 'Front faces north' },
+              { value: '270', label: 'Front faces east' },
+            ]}
+            onChange={(v) => update(item.id, { rotation: Number(v) })}
+            ariaLabel="Item direction"
+          />
+        </Field>
+        <Field label="Colour">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {ITEM_COLOURS.map((col) => (
+              <button
+                key={col}
+                disabled={dis}
+                title={col}
+                aria-label={`Colour ${col}`}
+                aria-pressed={(item.color ?? c.color) === col}
+                onClick={() => update(item.id, { color: col })}
+                className={`h-6 w-6 rounded border ${(item.color ?? c.color) === col ? 'border-ochre ring-2 ring-ochre/40' : 'border-line'}`}
+                style={{ background: col }}
+              />
+            ))}
+            <input type="color" aria-label="Custom colour" disabled={dis} value={item.color ?? c.color} onChange={(e) => update(item.id, { color: e.target.value })} className="h-6 w-8" />
+          </div>
+        </Field>
+        <dl className="grid grid-cols-2 gap-y-1 text-sm">
+          <dt className="text-muted">Front faces</dt>
+          <dd className="text-right">{faces}</dd>
+          <dt className="text-muted">Position on plot</dt>
+          <dd className="text-right">{ZONE_LABELS[zone]}</dd>
+        </dl>
+        <p className="text-xs text-muted">Typical size from the catalogue: {formatLength(c.w, unit)} × {formatLength(c.d, unit)}. Change it to match the product you buy. R turns it, arrow keys nudge it.</p>
+        <ElementActions locked={item.locked} />
+      </Section>
+    </>
+  );
+}
+
 function RoomProps({ room, project }: { room: Room; project: Project }) {
   const update = useProjectStore((s) => s.updateRoom);
   const unit = project.settings.unit;
   const box = boundingBox(project.plot.boundary);
-  const zone = zoneOf(rectCenter(room), box);
+  const zone = zoneOf(roomCentre(room), box);
   const dis = room.locked;
   const typeOptions = (Object.keys(ROOM_TYPE_LABELS) as RoomType[]).map((t) => ({ value: t, label: ROOM_TYPE_LABELS[t] }));
   return (
@@ -158,6 +258,25 @@ function RoomProps({ room, project }: { room: Room; project: Project }) {
             <LengthInput valueMm={room.y} unit={unit} disabled={dis} min={-1e9} onCommit={(y) => update(room.id, { y })} ariaLabel="Y position" />
           </Field>
         </div>
+        <div className="flex flex-wrap gap-1.5">
+          {isPolygonRoom(room) ? (
+            <Button disabled={dis} onClick={() => update(room.id, { points: undefined })} title="Make it a rectangle again">
+              Make rectangle
+            </Button>
+          ) : (
+            <>
+              <Button disabled={dis} onClick={() => update(room.id, { points: lShapeOf(room) })} title="Make an L-shaped room">
+                Make L-shape
+              </Button>
+              <Button disabled={dis} onClick={() => update(room.id, { points: rectCorners(room) })} title="Edit the corners freely">
+                Edit corners
+              </Button>
+            </>
+          )}
+        </div>
+        {isPolygonRoom(room) && (
+          <p className="text-xs text-muted">Drag the orange corners; click + on an edge to add a corner; double-click a corner to remove it.</p>
+        )}
         {room.type === 'staircase' && (
           <Field label="Walking up towards">
             <Select<Side>
@@ -184,11 +303,12 @@ function RoomProps({ room, project }: { room: Room; project: Project }) {
         )}
         <dl className="grid grid-cols-2 gap-y-1 text-sm">
           <dt className="text-muted">Area (to centre-lines)</dt>
-          <dd className="text-right">{formatArea(room.w * room.d, unit)}</dd>
+          <dd className="text-right">{formatArea(roomArea(room), unit)}</dd>
           <dt className="text-muted">Position on plot</dt>
           <dd className="text-right">{ZONE_LABELS[zone]}</dd>
         </dl>
         <RoomVaasthu room={room} project={project} />
+        <RoomDesign room={room} />
         <ElementActions locked={room.locked} rotate />
       </Section>
     </>
@@ -612,7 +732,7 @@ function Overview({ project }: { project: Project }) {
                   <td className="py-0.5 pr-2 whitespace-nowrap text-ink-soft">
                     {formatLength(r.w, unit)} × {formatLength(r.d, unit)}
                   </td>
-                  <td className="py-0.5 text-right text-ink-soft">{zoneOf(rectCenter(r), box)}</td>
+                  <td className="py-0.5 text-right text-ink-soft">{zoneOf(roomCentre(r), box)}</td>
                 </tr>
               ))}
             </tbody>

@@ -16,9 +16,10 @@ import {
   wallLength,
   ZONE_GRID,
 } from '../model/geometry';
-import { formatLength, gridStepMm } from '../model/units';
+import { formatLength, formatSize, gridStepMm } from '../model/units';
 import type { Point, Wall } from '../model/types';
 import { clearances, houseContents } from '../model/footprint';
+import { isPolygonRoom, roomArea, roomLabelRect } from '../model/roomShape';
 import { evaluate } from '../vaasthu/engine';
 
 const SIXTEEN = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -28,6 +29,8 @@ import { useCursorStore } from '../store/cursorStore';
 import { useUiStore } from '../store/uiStore';
 import { DARK, LIGHT } from './palette';
 import { DimensionLine, OpeningShape, px, RoomLabel, roomFill, StairArrow, WallShape } from './shapes';
+import { ItemShape } from './ItemShape';
+import { catalogEntry, createItem } from '../model/catalog';
 
 const MIN_ROOM_MM = 300;
 
@@ -46,6 +49,8 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   const addRoom = useProjectStore((s) => s.addRoom);
   const addWall = useProjectStore((s) => s.addWall);
   const addOpening = useProjectStore((s) => s.addOpening);
+  const addItem = useProjectStore((s) => s.addItem);
+  const updateItem = useProjectStore((s) => s.updateItem);
   const updateFootprint = useProjectStore((s) => s.updateFootprint);
   const moveHouse = useProjectStore((s) => s.moveHouse);
 
@@ -68,8 +73,8 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   const fp = project.footprint;
   const [houseDrag, setHouseDrag] = useState<{ dx: number; dy: number } | null>(null);
   const houseInside = useMemo(() => (fp ? houseContents(project, fp) : null), [project, fp]);
-  const shiftOf = (id: string, kind: 'room' | 'wall') =>
-    houseDrag && houseInside && (kind === 'room' ? houseInside.rooms : houseInside.walls).has(id) ? houseDrag : null;
+  const shiftOf = (id: string, kind: 'room' | 'wall' | 'item') =>
+    houseDrag && houseInside && (kind === 'room' ? houseInside.rooms : kind === 'wall' ? houseInside.walls : houseInside.items).has(id) ? houseDrag : null;
   const liveWall = (w: Wall): Wall => {
     const o = shiftOf(w.id, 'wall');
     return o ? { ...w, a: { x: w.a.x + o.dx, y: w.a.y + o.dy }, b: { x: w.b.x + o.dx, y: w.b.y + o.dy } } : w;
@@ -92,6 +97,8 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   const [wallChain, setWallChain] = useState<{ start: Point; current: Point } | null>(null);
   const [measure, setMeasure] = useState<{ a: Point; b: Point | null } | null>(null);
   const [measureHover, setMeasureHover] = useState<Point | null>(null);
+  const [itemHover, setItemHover] = useState<Point | null>(null);
+  const [placeRotation, setPlaceRotation] = useState(0);
   const [hoverWall, setHoverWall] = useState<{ wall: Wall; site: boolean; offset: number } | null>(null);
   const panRef = useRef<{ start: Point; view: { x: number; y: number } } | null>(null);
   const pinchRef = useRef<{ dist: number; center: Point; view: typeof view } | null>(null);
@@ -133,6 +140,9 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       shiftRef.current = e.shiftKey;
+      if ((e.key === 'r' || e.key === 'R') && useUiStore.getState().tool === 'item' && !(e.target instanceof HTMLInputElement)) {
+        setPlaceRotation((r) => (r + 90) % 360);
+      }
       if (e.key === 'Escape') {
         setDraftRect(null);
         setWallChain(null);
@@ -152,6 +162,7 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
     setDraftRect(null);
     setWallChain(null);
     setHoverWall(null);
+    setItemHover(null);
     if (tool !== 'measure') setMeasure(null);
   }, [tool, activeFloorId]);
 
@@ -254,6 +265,12 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
       }
       return;
     }
+    if (tool === 'item') {
+      const s = snapped(p);
+      addItem(createItem(ui.itemType, s.x, s.y, placeRotation));
+      if (!shiftRef.current) ui.setTool('select');
+      return;
+    }
     if (tool === 'measure') {
       const s = snapped(p);
       if (!measure || measure.b) setMeasure({ a: s, b: null });
@@ -286,6 +303,7 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
     else if (wallChain) setWallChain({ start: wallChain.start, current: orthoEnd(wallChain.start, snapped(p)) });
     if (tool === 'door' || tool === 'window' || tool === 'gate') setHoverWall(nearestWall(p));
     if (tool === 'measure') setMeasureHover(snapped(p));
+    if (tool === 'item') setItemHover(snapped(p));
   };
   const onPointerUp = () => {
     panRef.current = null;
@@ -594,7 +612,18 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
                   }}
                   name="room"
                 >
-                  <Rect
+                  {isPolygonRoom(r) && (
+                    <Line
+                      points={r.points.flatMap((p) => [p.x - r.x, p.y - r.y])}
+                      closed
+                      fill={fill}
+                      opacity={opacity}
+                      stroke={sel ? palette.selection : undefined}
+                      strokeWidth={sel ? 2.5 : 1}
+                      strokeScaleEnabled={false}
+                    />
+                  )}
+                  {!isPolygonRoom(r) && <Rect
                     ref={(node) => {
                       if (node) roomRectRefs.current.set(r.id, node);
                       else roomRectRefs.current.delete(r.id);
@@ -626,9 +655,16 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
                         d: Math.max(MIN_ROOM_MM, bottom - ny),
                       });
                     }}
-                  />
-                  {r.type === 'staircase' && <StairArrow room={r} color={palette.ink} scale={s} />}
-                  <RoomLabel room={r} unit={unit} scale={s} color={palette.ink} />
+                  />}
+                  {r.type === 'staircase' && !isPolygonRoom(r) && <StairArrow room={r} color={palette.ink} scale={s} />}
+                  {(() => {
+                    const lr = roomLabelRect(r);
+                    return (
+                      <Group x={lr.x - r.x} y={lr.y - r.y}>
+                        <RoomLabel room={{ ...r, w: lr.w, d: lr.d }} unit={unit} scale={s} color={palette.ink} areaMm2={roomArea(r)} sizeText={isPolygonRoom(r) ? `${formatSize(r.w, r.d, unit)} overall` : undefined} />
+                      </Group>
+                    );
+                  })()}
                   {r.locked && <Text text="🔒" x={px(4, s)} y={px(3, s)} fontSize={px(11, s)} listening={false} />}
                 </Group>
               );
@@ -703,6 +739,53 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
                 />
               );
             })}
+
+            {/* furniture, fixtures and outdoor items */}
+            {floor.items.map((it) => {
+              const sel = selection?.kind === 'item' && selection.id === it.id;
+              const o = shiftOf(it.id, 'item');
+              return (
+                <ItemShape
+                  key={it.id}
+                  item={it}
+                  palette={palette}
+                  scale={s}
+                  dark={dark}
+                  selected={sel}
+                  dx={o?.dx}
+                  dy={o?.dy}
+                  draggable={tool === 'select' && !it.locked}
+                  onSelect={tool === 'select' ? () => select({ kind: 'item', id: it.id }) : undefined}
+                  onRotate={!it.locked ? (deg) => updateItem(it.id, { rotation: (it.rotation + deg) % 360 }) : undefined}
+                  onDragEnd={(e) => {
+                    const n = e.target;
+                    const x = snap(n.x(), snapMm);
+                    const y = snap(n.y(), snapMm);
+                    n.position({ x: it.x, y: it.y });
+                    if (x !== it.x || y !== it.y) updateItem(it.id, { x, y });
+                  }}
+                />
+              );
+            })}
+            {tool === 'item' && itemHover && (
+              <Group opacity={0.55} listening={false}>
+                <ItemShape
+                  item={createItem(ui.itemType, itemHover.x, itemHover.y, placeRotation, { id: 'preview' })}
+                  palette={palette}
+                  scale={s}
+                  dark={dark}
+                  selected
+                  draggable={false}
+                />
+                <Text
+                  text={`${catalogEntry(ui.itemType).label} — click to place, R to turn, Shift+click to place several`}
+                  x={itemHover.x + px(14, s)}
+                  y={itemHover.y + px(14, s)}
+                  fontSize={px(12, s)}
+                  fill={palette.ink}
+                />
+              </Group>
+            )}
 
             {/* house size tab (drag handle) and clearances to the plot boundary */}
             {liveFp && fp && (
@@ -811,6 +894,58 @@ export function PlanCanvas({ stageRef }: { stageRef: React.RefObject<Konva.Stage
                   scale={s}
                   color={palette.dim}
                 />
+              </>
+            )}
+
+            {/* corner handles for the selected irregular room */}
+            {selectedRoom && isPolygonRoom(selectedRoom) && !selectedRoom.locked && tool === 'select' && (
+              <>
+                {selectedRoom.points.map((p, i) => {
+                  const q = selectedRoom.points[(i + 1) % selectedRoom.points.length];
+                  const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+                  return (
+                    <Group
+                      key={`rm${i}`}
+                      x={mid.x}
+                      y={mid.y}
+                      onMouseDown={(ev) => {
+                        ev.cancelBubble = true;
+                        const pts = [...selectedRoom.points];
+                        pts.splice(i + 1, 0, mid);
+                        updateRoom(selectedRoom.id, { points: pts });
+                      }}
+                    >
+                      <Circle radius={6 / s} fill={palette.plotFill} stroke={palette.selection} strokeWidth={1.5} strokeScaleEnabled={false} />
+                      <Text text="+" x={-4 / s} y={-6 / s} fontSize={px(12, s)} fill={palette.selection} />
+                    </Group>
+                  );
+                })}
+                {selectedRoom.points.map((p, i) => (
+                  <Circle
+                    key={`rv${i}`}
+                    x={p.x}
+                    y={p.y}
+                    radius={7 / s}
+                    fill={palette.selection}
+                    stroke={palette.plotFill}
+                    strokeWidth={2}
+                    strokeScaleEnabled={false}
+                    draggable
+                    onMouseDown={(e) => (e.cancelBubble = true)}
+                    onDragMove={(e) => {
+                      const n = e.target;
+                      n.x(snap(n.x(), snapMm));
+                      n.y(snap(n.y(), snapMm));
+                    }}
+                    onDragEnd={(e) => {
+                      const pts = selectedRoom.points.map((q, j) => (j === i ? { x: e.target.x(), y: e.target.y() } : q));
+                      updateRoom(selectedRoom.id, { points: pts });
+                    }}
+                    onDblClick={() => {
+                      if (selectedRoom.points.length > 3) updateRoom(selectedRoom.id, { points: selectedRoom.points.filter((_, j) => j !== i) });
+                    }}
+                  />
+                ))}
               </>
             )}
 
@@ -1065,6 +1200,7 @@ const HINTS: Partial<Record<string, string>> = {
   measure: 'Click two points to measure. Esc clears.',
   plot: 'Drag the corner points to reshape the plot. Click + to add a corner, double-click a corner to remove it.',
   pan: 'Drag to move around. Scroll or pinch to zoom.',
+  item: 'Click to place. R turns it. Hold Shift to place several. Esc stops.',
 };
 
 function ToolHint() {

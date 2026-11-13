@@ -8,10 +8,12 @@ import { wallDir, wallLength } from '../model/geometry';
 import { defaultFinishFor, floorFinish } from '../model/finishes';
 import type { Floor, Opening, Project, Room, Wall } from '../model/types';
 import { roomGetsWalls } from '../model/wallBuilder';
+import { finishTexture, type TextureSpec } from './textureSpec';
+import { roomRects } from '../model/roomShape';
 
 export const PLINTH_MM = 450; // 1'-6" plinth above ground, a common default
 
-export type PartKind = 'wall' | 'slab' | 'floor' | 'glass' | 'door' | 'gate' | 'step' | 'tank' | 'lid' | 'site' | 'parapet' | 'roof';
+export type PartKind = 'wall' | 'slab' | 'floor' | 'glass' | 'door' | 'gate' | 'step' | 'tank' | 'lid' | 'site' | 'parapet' | 'roof' | 'trim';
 
 export interface BoxPart {
   shape: 'box';
@@ -29,7 +31,9 @@ export interface BoxPart {
   color: string;
   floorLevel: number;
   /** Selection target when clicked. */
-  ref?: { kind: 'room' | 'wall' | 'opening'; id: string; floorId: string };
+  ref?: { kind: 'room' | 'wall' | 'opening' | 'item'; id: string; floorId: string };
+  /** Optional procedural texture (on the top face for floors, the side for walls). */
+  texture?: TextureSpec;
 }
 
 export interface GablePart {
@@ -155,7 +159,7 @@ export function buildParts(project: Project): Part[] {
   // Compound wall and gates (ground level).
   for (const w of project.siteWalls) {
     for (const p of wallPieces(w, project.siteOpenings)) {
-      parts.push(boxAlongWall(w, p.u0, p.u1, p.v0, p.v1, w.thicknessMm, 0, 'wall', COLORS.compound, 0));
+      parts.push({ ...boxAlongWall(w, p.u0, p.u1, p.v0, p.v1, w.thicknessMm, 0, 'wall', COLORS.compound, 0), texture: { kind: 'paint', tileM: 2 } });
     }
     for (const o of project.siteOpenings.filter((x) => x.wallId === w.id)) {
       parts.push(boxAlongWall(w, o.offsetMm - o.widthMm / 2, o.offsetMm + o.widthMm / 2, 0, Math.min(o.heightMm, w.heightMm), 40, 0, 'gate', COLORS.gate, 0));
@@ -175,7 +179,7 @@ export function buildParts(project: Project): Part[] {
 
     for (const r of floor.rooms) {
       if (r.type === 'garden' || r.type === 'pathway' || r.type === 'parking') {
-        parts.push(roomBox(r, 25, 20, 'site', r.type === 'garden' ? COLORS.garden : COLORS.pathway, lvl, ref('room', r.id)));
+        parts.push({ ...roomBox(r, 25, 20, 'site', r.type === 'garden' ? COLORS.garden : COLORS.pathway, lvl, ref('room', r.id)), texture: r.type === 'garden' ? { kind: 'grass', tileM: 2 } : { kind: 'paving', tileM: 1.2 } });
       } else if (r.type === 'sump' || r.type === 'septic_tank' || r.type === 'borewell') {
         parts.push(roomBox(r, 60, 60, 'lid', COLORS.lid, lvl, ref('room', r.id)));
       } else if (r.type === 'overhead_tank') {
@@ -186,17 +190,22 @@ export function buildParts(project: Project): Part[] {
       } else if (r.type === 'terrace') {
         // walkable roof: the slab below is drawn by the floor underneath
       } else {
-        const color = floorFinish(r.floorFinish ?? defaultFinishFor(r.type) ?? fin.floor).color;
+        const finishId = r.floorFinish ?? defaultFinishFor(r.type) ?? fin.floor;
+        const color = floorFinish(finishId).color;
+        const texture = finishTexture(finishId);
         // Ground-floor rooms stand on a plinth block; upper floors on a thin finish layer over the slab.
-        if (lvl === 0) parts.push(roomBox(r, base, base, 'floor', color, lvl, ref('room', r.id)));
-        else parts.push(roomBox(r, base + 15, 15, 'floor', color, lvl, ref('room', r.id)));
+        for (const piece of roomRects(r)) {
+          const rr = { ...r, ...piece };
+          if (lvl === 0) parts.push({ ...roomBox(rr, base, base, 'floor', color, lvl, ref('room', r.id)), texture });
+          else parts.push({ ...roomBox(rr, base + 15, 15, 'floor', color, lvl, ref('room', r.id)), texture });
+        }
       }
     }
 
     for (const w of floor.walls) {
       const color = w.kind === 'exterior' ? fin.exteriorWall : fin.interiorWall;
       for (const p of wallPieces(w, floor.openings)) {
-        parts.push(boxAlongWall(w, p.u0, p.u1, p.v0, p.v1, w.thicknessMm, base, 'wall', color, lvl, ref('wall', w.id)));
+        parts.push({ ...boxAlongWall(w, p.u0, p.u1, p.v0, p.v1, w.thicknessMm, base, 'wall', color, lvl, ref('wall', w.id)), texture: { kind: 'paint', tileM: 2 } });
       }
     }
 
@@ -210,11 +219,42 @@ export function buildParts(project: Project): Part[] {
       else parts.push(boxAlongWall(w, u0, u1, 0, top, o.type === 'gate' ? 40 : 35, base, o.type === 'gate' ? 'gate' : 'door', o.type === 'gate' ? COLORS.gate : COLORS.door, lvl, ref('opening', o.id)));
     }
 
+    // Sunshades (chajjas) over windows and doors in outside walls, and bands at slab level.
+    const ext = project.exterior;
+    const extWalls = floor.walls.filter((w) => w.kind === 'exterior');
+    if (extWalls.length && (ext?.sunshadeMm > 0 || ext?.bands)) {
+      const pts = extWalls.flatMap((w) => [w.a, w.b]);
+      const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+      const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+      for (const w of extWalls) {
+        const d = wallDir(w);
+        let n = { x: -d.y, y: d.x };
+        const mid = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 };
+        if ((mid.x - cx) * n.x + (mid.y - cy) * n.y < 0) n = { x: -n.x, y: -n.y };
+        const ry = -Math.atan2(d.y, d.x);
+        if (ext.sunshadeMm > 0) {
+          for (const o of floor.openings.filter((x) => x.wallId === w.id && x.type !== 'gate')) {
+            const top = Math.min(o.sillMm + o.heightMm, w.heightMm);
+            if (top > w.heightMm - 100) continue; // no room above the opening
+            const off = w.thicknessMm / 2 + ext.sunshadeMm / 2;
+            const c = { x: w.a.x + d.x * o.offsetMm + n.x * off, y: w.a.y + d.y * o.offsetMm + n.y * off };
+            parts.push({ shape: 'box', kind: 'trim', x: M(c.x), z: M(c.y), y: M(base + top + 150 + 40), sx: M(o.widthMm + 300), sy: M(80), sz: M(ext.sunshadeMm), ry, color: fin.exteriorWall, floorLevel: lvl });
+          }
+        }
+        if (ext.bands) {
+          const off = w.thicknessMm / 2 + 40;
+          const len = wallLength(w) + w.thicknessMm + 160;
+          const c = { x: mid.x + n.x * off, y: mid.y + n.y * off };
+          parts.push({ shape: 'box', kind: 'trim', x: M(c.x), z: M(c.y), y: M(base + floor.heightMm + project.roof.slabMm / 2), sx: M(len), sy: M(Math.max(150, project.roof.slabMm + 50)), sz: M(80), ry, color: ext.bandColor, floorLevel: lvl });
+        }
+      }
+    }
+
     // Slab over every walled room and the portico.
     const covered = floor.rooms.filter((r) => roomGetsWalls(r) || r.type === 'portico');
     const slabTop = base + floor.heightMm;
     for (const r of covered) {
-      parts.push(roomBox(r, slabTop, project.roof.slabMm, 'slab', project.finishes.roof, lvl, ref('room', r.id)));
+      for (const piece of roomRects(r)) parts.push(roomBox({ ...r, ...piece }, slabTop, project.roof.slabMm, 'slab', project.finishes.roof, lvl, ref('room', r.id)));
     }
   }
 

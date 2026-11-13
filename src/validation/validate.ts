@@ -13,6 +13,7 @@ import {
 } from '../model/geometry';
 import { formatLength } from '../model/units';
 import { footprintInsidePlot, SITE_ROOM_TYPES } from '../model/footprint';
+import { roomEdges, roomPolygon, roomRects } from '../model/roomShape';
 import type { Floor, Project, Room, RoomType, Side } from '../model/types';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -94,7 +95,7 @@ export function validateProject(project: Project): Issue[] {
     if (!footprintInsidePlot(fp, boundary)) {
       add({ severity: 'error', category: 'plot', message: 'The house outline extends outside the plot.', elementIds: ['footprint'] });
     } else {
-      const sides = setbackSidesViolated(project, fp);
+      const sides = setbackSidesViolated(project, rectCorners(fp));
       if (sides.length) {
         add({
           severity: 'warning',
@@ -107,7 +108,7 @@ export function validateProject(project: Project): Issue[] {
     for (const floor of sortedFloors) {
       for (const r of floor.rooms) {
         if (SITE_ROOM_TYPES.includes(r.type)) continue;
-        const outside = rectCorners(r).some((c) => !pointInRect(c, fp, 1));
+        const outside = roomPolygon(r).some((c) => !pointInRect(c, fp, 1));
         if (outside) {
           add({
             severity: 'warning',
@@ -138,10 +139,10 @@ export function validateProject(project: Project): Issue[] {
   return issues;
 }
 
-function setbackSidesViolated(project: Project, r: { x: number; y: number; w: number; d: number }): Side[] {
+function setbackSidesViolated(project: Project, pts: { x: number; y: number }[]): Side[] {
   const boundary = project.plot.boundary;
   const sides = new Set<Side>();
-  for (const c of rectCorners(r)) {
+  for (const c of pts) {
     for (let i = 0; i < boundary.length; i++) {
       const a = boundary[i];
       const b = boundary[(i + 1) % boundary.length];
@@ -163,11 +164,11 @@ function validateFloor(project: Project, floor: Floor, add: (i: Omit<Issue, 'id'
       add({ severity: 'error', category: 'geometry', message: `${r.name} (${where}) has zero size.`, floorId: floor.id, elementIds: [r.id] });
       continue;
     }
-    const outside = rectCorners(r).some((c) => !pointInPolygon(c, boundary, 1));
+    const outside = roomPolygon(r).some((c) => !pointInPolygon(c, boundary, 1));
     if (outside) {
       add({ severity: 'error', category: 'plot', message: `${r.name} (${where}) extends outside the plot.`, floorId: floor.id, elementIds: [r.id] });
     } else if (!SETBACK_ALLOWED.includes(r.type)) {
-      const sides = setbackSidesViolated(project, r);
+      const sides = setbackSidesViolated(project, roomPolygon(r));
       if (sides.length) {
         add({
           severity: 'warning',
@@ -185,7 +186,9 @@ function validateFloor(project: Project, floor: Floor, add: (i: Omit<Issue, 'id'
       const a = floor.rooms[i];
       const b = floor.rooms[j];
       if (OVERLAP_ALLOWED.includes(a.type) && OVERLAP_ALLOWED.includes(b.type)) continue;
-      const ov = rectOverlapArea(a, b);
+      const ra = roomRects(a);
+      const rb = roomRects(b);
+      const ov = ra.reduce((s, x) => s + rb.reduce((t, y) => t + rectOverlapArea(x, y), 0), 0);
       if (ov > 0) {
         add({
           severity: 'error',
@@ -253,8 +256,8 @@ function validateFloor(project: Project, floor: Floor, add: (i: Omit<Issue, 'id'
     const doorPoints = pointsOf('door');
     const windowPoints = pointsOf('window');
     const onEdge = (r: Room, pts: { x: number; y: number }[]) => {
-      const corners = rectCorners(r);
-      return pts.some((p) => corners.some((c, i) => distanceToSegment(p, c, corners[(i + 1) % 4]) < 5));
+      const edges = roomEdges(r);
+      return pts.some((p) => edges.some(([a, b]) => distanceToSegment(p, a, b) < 5));
     };
     for (const r of floor.rooms) {
       if (NEEDS_DOOR.includes(r.type) && !onEdge(r, doorPoints)) {

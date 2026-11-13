@@ -1,11 +1,25 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { Children, useEffect, useId, useState, type ReactNode } from 'react';
+import { useT } from '../i18n';
+
+/** Translate plain-text children (icons and other elements pass through). */
+function useTChildren(children: ReactNode): ReactNode {
+  const t = useT();
+  return Children.map(children, (c) => {
+    if (typeof c !== 'string') return c;
+    const lead = c.match(/^\s*/)![0];
+    const trail = c.match(/\s*$/)![0];
+    const core = c.trim();
+    return core ? lead + t(core) + trail : c;
+  });
+}
 import { formatLength, parseLength } from '../model/units';
 import type { DisplayUnit } from '../model/types';
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  const t = useT();
   return (
     <label className="block">
-      <span className="mb-1 block text-xs text-muted">{label}</span>
+      <span className="mb-1 block text-xs text-muted">{t(label)}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>
@@ -165,11 +179,12 @@ export function Select<T extends string>({
   disabled?: boolean;
   ariaLabel?: string;
 }) {
+  const t = useT();
   return (
     <select className={inputCls} value={value} disabled={disabled} aria-label={ariaLabel} onChange={(e) => onChange(e.target.value as T)}>
       {options.map((o) => (
         <option key={o.value} value={o.value}>
-          {o.label}
+          {t(o.label)}
         </option>
       ))}
     </select>
@@ -178,11 +193,12 @@ export function Select<T extends string>({
 
 export function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   const id = useId();
+  const t = useT();
   return (
     <div className="flex items-center gap-2">
-      <input id={id} type="checkbox" className="h-4 w-4 accent-[var(--ochre)]" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input id={id} type="checkbox" className="h-4 w-4 accent-[var(--ochre)]" checked={checked} onChange={(e) => onChange(e.target.checked)} aria-label={label} />
       <label htmlFor={id} className="text-sm text-ink">
-        {label}
+        {t(label)}
       </label>
     </div>
   );
@@ -207,6 +223,7 @@ export function Button({
   type?: 'button' | 'submit';
   ariaPressed?: boolean;
 }) {
+  const kids = useTChildren(children);
   const styles = {
     default: 'border border-line bg-panel text-ink hover:border-ink-soft',
     primary: 'border border-ink bg-ink text-panel hover:opacity-90',
@@ -223,16 +240,17 @@ export function Button({
       aria-label={title}
       aria-pressed={ariaPressed}
     >
-      {children}
+      {kids}
     </button>
   );
 }
 
 export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  const t = useT();
   return (
     <section className="border-b border-line px-4 py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-ink">{title}</h3>
+        <h3 className="text-sm font-bold text-ink">{t(title)}</h3>
         {action}
       </div>
       <div className="space-y-2.5">{children}</div>
@@ -251,6 +269,7 @@ export function Dialog({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const t = useT();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -266,7 +285,7 @@ export function Dialog({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
-          <h2 className="min-w-0 flex-1 text-lg font-bold text-ink">{title}</h2>
+          <h2 className="min-w-0 flex-1 text-lg font-bold text-ink">{t(title)}</h2>
           <button className="shrink-0 rounded px-2 py-1 text-xl leading-none text-muted hover:text-ink" onClick={onClose} aria-label="Close">
             ×
           </button>

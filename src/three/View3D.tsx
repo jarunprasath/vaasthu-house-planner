@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,8 +8,16 @@ import { useProjectStore } from '../store/projectStore';
 import { useUiStore } from '../store/uiStore';
 import { buildParts, type BoxPart, type GablePart, type Part } from './buildModel';
 import { SiteOverlay } from './SiteOverlay';
+import { makeTexture } from './textures';
+import { catalogEntry } from '../model/catalog';
+
+const isOutdoor = (type: string) => !!catalogEntry(type).tags?.includes('outdoor');
 import { floorElevations } from './buildModel';
 import type { Underlay } from '../model/types';
+import { ItemMesh, PartMesh, pointOnPlane, WalkControls, type Offset, type WalkKey, type WalkKeys } from './Interactive';
+import { snap } from '../model/geometry';
+import { mainEntrance } from '../vaasthu/engine';
+import { useT } from '../i18n';
 
 function UnderlayPlane({ u, elevationMm }: { u: Underlay; elevationMm: number }) {
   const tex = useMemo(() => {
@@ -36,7 +44,7 @@ export function sunDirection(hour: number): THREE.Vector3 {
   return new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
 }
 
-function Gable({ p, opacity, onPick }: { p: GablePart; opacity: number; onPick?: (e: ThreeEvent<MouseEvent>) => void }) {
+function Gable({ p, opacity, onPick, textures }: { p: GablePart; opacity: number; textures?: boolean; onPick?: (e: ThreeEvent<MouseEvent>) => void }) {
   const geom = useMemo(() => {
     const ew = p.ridge === 'EW';
     const span = ew ? p.z1 - p.z0 : p.x1 - p.x0;
@@ -51,7 +59,13 @@ function Gable({ p, opacity, onPick }: { p: GablePart; opacity: number; onPick?:
   }, [p]);
   return (
     <mesh geometry={geom} position={[p.x0, p.base, p.z0]} rotation={[0, p.ridge === 'EW' ? Math.PI / 2 : 0, 0]} castShadow receiveShadow onClick={onPick}>
-      <meshStandardMaterial color={p.color} transparent={opacity < 1} opacity={opacity} side={THREE.DoubleSide} />
+      <meshStandardMaterial
+        color={textures ? '#ffffff' : p.color}
+        map={textures ? makeTexture({ kind: 'roofTile', tileM: 1 }, p.color, (p.ridge === 'EW' ? p.x1 - p.x0 : p.z1 - p.z0) / 2, p.rise * 2) : null}
+        transparent={opacity < 1}
+        opacity={opacity}
+        side={THREE.DoubleSide}
+      />
     </mesh>
   );
 }
@@ -65,7 +79,13 @@ function Scene({
   presetTick,
   showRoof,
   showLabels,
+  textures,
+  walk,
+  walkKeys,
 }: {
+  textures: boolean;
+  walk: boolean;
+  walkKeys: MutableRefObject<WalkKeys>;
   showRoof: boolean;
   showLabels: boolean;
   parts: Part[];
@@ -81,7 +101,75 @@ function Scene({
   const setActiveFloor = useProjectStore((s) => s.setActiveFloor);
   const dark = useUiStore((s) => s.theme === 'dark');
   const controls = useRef<OrbitControlsImpl | null>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
+  const updateRoom = useProjectStore((s) => s.updateRoom);
+  const updateWall = useProjectStore((s) => s.updateWall);
+  const updateItem = useProjectStore((s) => s.updateItem);
+  const snapMm = useProjectStore((s) => s.project.settings.snapMm);
+  const elev = useMemo(() => floorElevations(project), [project]);
+
+  // ---- drag to move the selected room, wall or furniture item on its floor ----
+  const [drag, setDrag] = useState<{ id: string; off: Offset } | null>(null);
+  const startDrag = (ref: BoxPart['ref']) => (e: ThreeEvent<PointerEvent>) => {
+    if (walk || !ref || !selection || selection.id !== ref.id || ref.kind === 'opening') return;
+    const floor = project.floors.find((f) => f.id === ref.floorId);
+    const el =
+      ref.kind === 'room' ? floor?.rooms.find((r) => r.id === ref.id) : ref.kind === 'wall' ? floor?.walls.find((w) => w.id === ref.id) : floor?.items.find((i) => i.id === ref.id);
+    if (!el || el.locked) return;
+    e.stopPropagation();
+    const planeY = e.point.y;
+    const start = e.point.clone();
+    if (controls.current) controls.current.enabled = false;
+    let last: Offset = { dx: 0, dz: 0 };
+    const move = (ev: PointerEvent) => {
+      const p = pointOnPlane(ev, gl.domElement, camera, planeY);
+      if (!p) return;
+      last = { dx: snap((p.x - start.x) * 1000, snapMm) / 1000, dz: snap((p.z - start.z) * 1000, snapMm) / 1000 };
+      setDrag({ id: ref.id, off: last });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (controls.current) controls.current.enabled = true;
+      setDrag(null);
+      const dx = last.dx * 1000;
+      const dy = last.dz * 1000;
+      if (!dx && !dy) return;
+      setActiveFloor(ref.floorId);
+      if (ref.kind === 'room') {
+        const r = floor!.rooms.find((x) => x.id === ref.id)!;
+        updateRoom(ref.id, { x: r.x + dx, y: r.y + dy });
+      } else if (ref.kind === 'wall') {
+        const w = floor!.walls.find((x) => x.id === ref.id)!;
+        updateWall(ref.id, { a: { x: w.a.x + dx, y: w.a.y + dy }, b: { x: w.b.x + dx, y: w.b.y + dy } });
+      } else if (ref.kind === 'item') {
+        const it = floor!.items.find((x) => x.id === ref.id)!;
+        updateItem(ref.id, { x: it.x + dx, y: it.y + dy });
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const offsetFor = (id?: string) => (drag && id === drag.id ? drag.off : null);
+
+  // ---- walking: start outside the main door, facing it ----
+  const walkStart = useMemo(() => {
+    const ground = [...project.floors].sort((a, b) => a.level - b.level)[0];
+    const ent = mainEntrance(project);
+    const fp = project.footprint;
+    const centre = fp ? { x: fp.x + fp.w / 2, y: fp.y + fp.d / 2 } : { x: box.x + box.w / 2, y: box.y + box.d / 2 };
+    if (ent) {
+      const dx = ent.point.x - centre.x;
+      const dy = ent.point.y - centre.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const pos: [number, number] = [(ent.point.x + (dx / len) * 6000) / 1000, (ent.point.y + (dy / len) * 6000) / 1000];
+      // face the door: camera looks along −z at yaw 0; forward = (−sin yaw, −cos yaw)
+      const yaw = Math.atan2(dx / len, dy / len);
+      return { pos, yaw, eye: ((elev.get(ground?.id ?? '') ?? 0) + 1600) / 1000 };
+    }
+    return { pos: [centre.x / 1000, (box.y + box.d) / 1000 + 2] as [number, number], yaw: 0, eye: 1.6 + (elev.get(ground?.id ?? '') ?? 0) / 1000 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walk]);
 
   const box = boundingBox(project.plot.boundary);
   const cx = (box.x + box.w / 2) / 1000;
@@ -90,6 +178,7 @@ function Scene({
 
   // Camera presets
   useEffect(() => {
+    if (walk) return;
     const r = radius * 1.45;
     const pos: Record<Preset, [number, number, number]> = {
       iso: [cx + r * 0.75, r * 0.85, cz + r * 0.95],
@@ -103,7 +192,7 @@ function Scene({
     controls.current?.target.set(cx, 1.5, cz);
     controls.current?.update();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preset, presetTick, cx, cz, radius]);
+  }, [preset, presetTick, cx, cz, radius, walk]);
 
   const sun = sunDirection(hour);
   const sunPos = sun.clone().multiplyScalar(radius * 2).add(new THREE.Vector3(cx, 0, cz));
@@ -186,31 +275,46 @@ function Scene({
 
       {visible.map((p, i) =>
         p.shape === 'gable' ? (
-          <Gable key={`g${i}`} p={p} opacity={1} />
+          <Gable key={`g${i}`} p={p} opacity={1} textures={textures} />
         ) : (
-          <mesh
+          <PartMesh
             key={i}
-            position={[p.x, p.y, p.z]}
-            rotation={[0, p.ry, 0]}
-            castShadow={p.kind !== 'glass' && p.kind !== 'site'}
-            receiveShadow
+            p={p}
+            selected={isSelected(p)}
+            wallOpacity={wallOpacity}
+            textures={textures}
+            offset={offsetFor(p.ref?.id)}
             onClick={onPick(p)}
-          >
-            <boxGeometry args={[p.sx, p.sy, p.sz]} />
-            <meshStandardMaterial
-              color={isSelected(p) ? '#e2b44c' : p.color}
-              emissive={isSelected(p) ? '#7a5a10' : '#000000'}
-              transparent={p.kind === 'glass' || ((p.kind === 'wall' || p.kind === 'parapet') && wallOpacity < 1)}
-              opacity={p.kind === 'glass' ? 0.45 : p.kind === 'wall' || p.kind === 'parapet' ? wallOpacity : 1}
-              roughness={p.kind === 'glass' ? 0.1 : 0.85}
-              metalness={p.kind === 'gate' ? 0.4 : 0}
-              depthWrite={!(p.kind === 'glass' || ((p.kind === 'wall' || p.kind === 'parapet') && wallOpacity < 1))}
-            />
-          </mesh>
+            onPointerDown={startDrag(p.ref)}
+          />
         ),
       )}
 
-      <SiteOverlay project={project} showLabels={showLabels} />
+      {project.floors
+        .filter((f) => f.level <= maxLevel)
+        .flatMap((f) =>
+          f.items.map((it) => {
+            const ref = { kind: 'item' as const, id: it.id, floorId: f.id };
+            return (
+              <ItemMesh
+                key={it.id}
+                it={it}
+                baseMm={f.level === 0 && isOutdoor(it.type) ? 0 : (elev.get(f.id) ?? 0)}
+                selected={selection?.kind === 'item' && selection.id === it.id}
+                offset={offsetFor(it.id)}
+                onClick={(e) => {
+                  if (e.delta > 4) return;
+                  e.stopPropagation();
+                  setActiveFloor(f.id);
+                  select({ kind: 'item', id: it.id });
+                }}
+                onPointerDown={startDrag(ref)}
+              />
+            );
+          }),
+        )}
+
+      <SiteOverlay project={project} showLabels={showLabels && !walk} />
       {project.underlays
         .filter((u) => u.showIn3d)
         .map((u) => {
@@ -219,7 +323,11 @@ function Scene({
           return <UnderlayPlane key={u.id} u={u} elevationMm={floorElevations(project).get(f.id) ?? 0} />;
         })}
 
-      <OrbitControls ref={controls} makeDefault maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={radius * 6} />
+      {walk ? (
+        <WalkControls start={walkStart.pos} yaw0={walkStart.yaw} eyeY={walkStart.eye} keys={walkKeys} />
+      ) : (
+        <OrbitControls ref={controls} makeDefault maxPolarAngle={Math.PI / 2 - 0.02} minDistance={2} maxDistance={radius * 6} />
+      )}
     </>
   );
 }
@@ -233,6 +341,15 @@ export default function View3D() {
   const [wallOpacity, setWallOpacity] = useState(1);
   const [showRoof, setShowRoof] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  const [textures, setTextures] = useState(true);
+  const [walk, setWalk] = useState(false);
+  const t = useT();
+  const walkKeys = useRef<WalkKeys>(new Set());
+  const hold = (k: WalkKey) => ({
+    onPointerDown: () => walkKeys.current.add(k),
+    onPointerUp: () => walkKeys.current.delete(k),
+    onPointerLeave: () => walkKeys.current.delete(k),
+  });
   const [hour, setHour] = useState(10);
   const [preset, setPreset] = useState<Preset>('iso');
   const [tick, setTick] = useState(0);
@@ -258,12 +375,12 @@ export default function View3D() {
         gl={{ preserveDrawingBuffer: true, antialias: true }}
         onCreated={({ gl }) => (glRef.current = gl.domElement)}
       >
-        <Scene parts={parts} showRoof={showRoof} showLabels={showLabels} maxLevel={maxLevel} wallOpacity={wallOpacity} hour={hour} preset={preset} presetTick={tick} />
+        <Scene parts={parts} textures={textures} walk={walk} walkKeys={walkKeys} showRoof={showRoof} showLabels={showLabels} maxLevel={maxLevel} wallOpacity={wallOpacity} hour={hour} preset={preset} presetTick={tick} />
       </Canvas>
 
       <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-end gap-2">
         <div className="rounded-md border border-line bg-panel/95 p-2 text-xs shadow-sm">
-          <p className="mb-1 text-muted">View</p>
+          <p className="mb-1 text-muted">{t('View')}</p>
           <div className="flex flex-wrap gap-1">
             {(['iso', 'top', 'north', 'east', 'south', 'west'] as Preset[]).map((p) => (
               <button
@@ -275,14 +392,14 @@ export default function View3D() {
                   setTick((t) => t + 1);
                 }}
               >
-                {{ iso: '3D', top: 'Top', north: 'From north', east: 'From east', south: 'From south', west: 'From west' }[p]}
+                {t({ iso: '3D', top: 'Top', north: 'From north', east: 'From east', south: 'From south', west: 'From west' }[p])}
               </button>
             ))}
           </div>
         </div>
         <div className="rounded-md border border-line bg-panel/95 p-2 text-xs shadow-sm">
           <label className="mb-1 block text-muted" htmlFor="floors3d">
-            Show floors up to
+            {t('Show floors up to')}
           </label>
           <select id="floors3d" className="rounded border border-line bg-panel px-1 py-0.5" value={maxLevel} onChange={(e) => setMaxLevel(Number(e.target.value))}>
             {levels.map((f) => (
@@ -295,15 +412,19 @@ export default function View3D() {
         <div className="rounded-md border border-line bg-panel/95 p-2 text-xs shadow-sm">
           <label className="flex items-center gap-1.5">
             <input type="checkbox" className="accent-[var(--ochre)]" checked={wallOpacity < 1} onChange={(e) => setWallOpacity(e.target.checked ? 0.3 : 1)} />
-            See-through walls
+            {t('See-through walls')}
           </label>
           <label className="mt-1 flex items-center gap-1.5">
             <input type="checkbox" className="accent-[var(--ochre)]" checked={!showRoof} onChange={(e) => setShowRoof(!e.target.checked)} />
-            Remove roof to look inside
+            {t('Remove roof to look inside')}
           </label>
           <label className="mt-1 flex items-center gap-1.5">
             <input type="checkbox" className="accent-[var(--ochre)]" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />
-            Site labels and gaps
+            {t('Site labels and gaps')}
+          </label>
+          <label className="mt-1 flex items-center gap-1.5">
+            <input type="checkbox" className="accent-[var(--ochre)]" checked={textures} onChange={(e) => setTextures(e.target.checked)} />
+            {t('Material textures')}
           </label>
         </div>
         <div className="rounded-md border border-line bg-panel/95 p-2 text-xs shadow-sm">
@@ -312,11 +433,28 @@ export default function View3D() {
           </label>
           <input id="sun3d" type="range" min={6} max={18} step={0.5} value={hour} onChange={(e) => setHour(Number(e.target.value))} className="w-40 accent-[var(--ochre)]" />
         </div>
-        <button className={`${btn} ml-auto`} onClick={snapshot}>
-          Save image
+        <button className={`${btn} ml-auto`} aria-pressed={walk} onClick={() => setWalk((w) => !w)}>
+          {walk ? t('Stop walking') : t('Walk through')}
+        </button>
+        <button className={btn} onClick={snapshot}>
+          {t('Save image')}
         </button>
       </div>
-      <p className="pointer-events-none absolute left-3 top-14 text-xs text-muted">Drag to orbit, right-drag to pan, scroll to zoom. Click a part to select it.</p>
+      <p className={`pointer-events-none absolute left-3 top-14 max-w-[70%] text-xs ${walk ? 'rounded bg-panel/90 px-2 py-1 text-ink' : 'text-muted'}`}>
+        {walk
+          ? 'Walking: arrow keys or W A S D to move, Q / E or ← → to turn, drag to look around. Walls do not stop you.'
+          : 'Drag to orbit, right-drag to pan, scroll to zoom. Click a part to select it, then drag it to move it.'}
+      </p>
+      {walk && (
+        <div className="absolute right-4 top-14 grid grid-cols-3 gap-1" aria-label="Walk controls">
+          <span />
+          <button className={`${btn} h-10 w-10 text-base`} aria-label="Walk forward" {...hold('forward')}>▲</button>
+          <span />
+          <button className={`${btn} h-10 w-10 text-base`} aria-label="Turn left" {...hold('turnLeft')}>⟲</button>
+          <button className={`${btn} h-10 w-10 text-base`} aria-label="Walk back" {...hold('back')}>▼</button>
+          <button className={`${btn} h-10 w-10 text-base`} aria-label="Turn right" {...hold('turnRight')}>⟳</button>
+        </div>
+      )}
     </div>
   );
 }

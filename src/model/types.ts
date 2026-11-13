@@ -90,6 +90,10 @@ export interface Room {
   stairUp?: Side;
   /** Floor finish id (see finishes.ts); falls back to the project default. */
   floorFinish?: string;
+  /**
+   * Irregular room outline (clockwise, mm). When present, x/y/w/d are its bounding box.
+   */
+  points?: Point[];
 }
 
 export type WallKind = 'exterior' | 'interior' | 'compound';
@@ -136,6 +140,31 @@ export interface Floor {
   rooms: Room[];
   walls: Wall[];
   openings: Opening[];
+  /** Furniture, fixtures and outdoor items. */
+  items: Item[];
+}
+
+/** A piece of furniture, a fixture or an outdoor item, placed by its centre. */
+export interface Item {
+  id: Id;
+  /** Catalogue id (see catalog.ts). */
+  type: string;
+  /** Centre (mm). */
+  x: number;
+  y: number;
+  /** Size before rotation: width (along its front), depth, height (mm). */
+  w: number;
+  d: number;
+  h: number;
+  /** Rotation in degrees, clockwise; 0 = the item's front faces south (towards the bottom of the plan). */
+  rotation: number;
+  /** Height of the item's base above the floor (wall-mounted units). */
+  elevationMm?: number;
+  color?: string;
+  /** Counter-top colour for kitchen units. */
+  topColor?: string;
+  label?: string;
+  locked: boolean;
 }
 
 export interface ProjectSettings {
@@ -171,6 +200,19 @@ export interface Project {
   roof: RoofSettings;
   /** Imported plan drawings shown under the plan (one per floor at most). */
   underlays: Underlay[];
+  /** Exterior style: sunshades over openings, floor bands. */
+  exterior: ExteriorSettings;
+}
+
+export type ElevationStyle = 'custom' | 'modern' | 'traditional' | 'contemporary' | 'villa';
+
+export interface ExteriorSettings {
+  style: ElevationStyle;
+  /** Depth of the sunshade (chajja) over windows and doors in outside walls; 0 = none. */
+  sunshadeMm: number;
+  /** Horizontal band along the outside walls at each floor slab. */
+  bands: boolean;
+  bandColor: string;
 }
 
 export interface Underlay {

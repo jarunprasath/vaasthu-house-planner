@@ -14,6 +14,7 @@ export function ExportDialog({ onClose, stageRef }: { onClose: () => void; stage
   const [includeSite, setIncludeSite] = useState(true);
   const [includeSchedule, setIncludeSchedule] = useState(true);
   const [includeVaasthu, setIncludeVaasthu] = useState(true);
+  const [includeElevations, setIncludeElevations] = useState(true);
   const [floorIds, setFloorIds] = useState<string[]>(floors.map((f) => f.id));
   const [preparedBy, setPreparedBy] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function ExportDialog({ onClose, stageRef }: { onClose: () => void; stage
       const { exportPdf } = await import('../../export/pdf');
       exportPdf(
         project,
-        { paper, scale: Number(scale), includeSite, includeSchedule, includeVaasthu, floorIds, revision: project.revision, preparedBy },
+        { paper, scale: Number(scale), includeSite, includeSchedule, includeVaasthu, includeElevations, floorIds, revision: project.revision, preparedBy },
         `${base}_R${project.revision}.pdf`,
       );
     } catch (e) {
@@ -98,6 +99,7 @@ export function ExportDialog({ onClose, stageRef }: { onClose: () => void; stage
               />
             ))}
             <Check checked={includeVaasthu} onChange={setIncludeVaasthu} label="Vaasthu orientation (grid, ratings, score)" />
+            <Check checked={includeElevations} onChange={setIncludeElevations} label="Elevations (north, south, east, west)" />
             <Check checked={includeSchedule} onChange={setIncludeSchedule} label="Door/window schedule and area statement" />
           </div>
           {error && (

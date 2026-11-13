@@ -13,6 +13,13 @@ if (new URLSearchParams(location.search).has('e2e')) {
   (window as unknown as { __vhp: unknown }).__vhp = { useProjectStore, useUiStore };
 }
 
+// Offline support: register the service worker in production builds only.
+if (import.meta.env.PROD && 'serviceWorker' in navigator && !new URLSearchParams(location.search).has('e2e')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

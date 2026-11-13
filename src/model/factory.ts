@@ -3,6 +3,7 @@ import { ft } from './units';
 import { ROOM_TYPE_LABELS, SCHEMA_VERSION } from './types';
 import { defaultRules } from '../vaasthu/rules';
 import type {
+  ExteriorSettings,
   Finishes,
   Floor,
   Opening,
@@ -44,6 +45,10 @@ export function defaultRoof(): RoofSettings {
   return { type: 'flat', parapetMm: ft(3), slabMm: 127, pitchDeg: 25, ridge: 'EW' };
 }
 
+export function defaultExterior(): ExteriorSettings {
+  return { style: 'custom', sunshadeMm: 0, bands: false, bandColor: '#ffffff' };
+}
+
 export function rectangularBoundary(widthMm: number, depthMm: number): Point[] {
   return [
     { x: 0, y: 0 },
@@ -77,6 +82,7 @@ export function createFloor(level: number, name?: string): Floor {
     rooms: [],
     walls: [],
     openings: [],
+    items: [],
   };
 }
 
@@ -99,6 +105,7 @@ export function createProject(name = 'Untitled house', plot: Plot = createPlot()
     finishes: defaultFinishes(),
     roof: defaultRoof(),
     underlays: [],
+    exterior: defaultExterior(),
   };
 }
 

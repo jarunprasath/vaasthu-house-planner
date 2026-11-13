@@ -1,6 +1,7 @@
 import { createWall } from './factory';
 import { distanceToSegment, EPS, pointAlongWall, pointInRect, projectT, wallLength } from './geometry';
 import { OUTDOOR_ROOM_TYPES } from './types';
+import { roomContainsStrict, roomEdges } from './roomShape';
 import type { Floor, Opening, Point, Project, ProjectSettings, Room, Wall } from './types';
 
 /** Room types that do not get enclosing walls when walls are generated from rooms. */
@@ -34,15 +35,16 @@ export function buildWallsFromRooms(rooms: Room[], settings: ProjectSettings): W
     list.push(s);
     m.set(k, list);
   };
+  const diagonal: [Point, Point][] = [];
   for (const r of walled) {
-    push(horiz, { c: r.y, from: r.x, to: r.x + r.w });
-    push(horiz, { c: r.y + r.d, from: r.x, to: r.x + r.w });
-    push(vert, { c: r.x, from: r.y, to: r.y + r.d });
-    push(vert, { c: r.x + r.w, from: r.y, to: r.y + r.d });
+    for (const [a, b] of roomEdges(r)) {
+      if (Math.abs(a.y - b.y) < EPS) push(horiz, { c: a.y, from: Math.min(a.x, b.x), to: Math.max(a.x, b.x) });
+      else if (Math.abs(a.x - b.x) < EPS) push(vert, { c: a.x, from: Math.min(a.y, b.y), to: Math.max(a.y, b.y) });
+      else diagonal.push([a, b]);
+    }
   }
 
-  const insideWalled = (p: Point) =>
-    walled.some((r) => p.x > r.x + EPS && p.x < r.x + r.w - EPS && p.y > r.y + EPS && p.y < r.y + r.d - EPS);
+  const insideWalled = (p: Point) => walled.some((r) => roomContainsStrict(r, p, EPS));
 
   const walls: Wall[] = [];
   const probe = 20; // mm either side of the centre-line
@@ -79,6 +81,8 @@ export function buildWallsFromRooms(rooms: Room[], settings: ProjectSettings): W
   };
   process(horiz, true);
   process(vert, false);
+  // Slanted edges of irregular rooms become exterior walls as they are (no sharing detection).
+  for (const [a, b] of diagonal) walls.push(createWall(a, b, 'exterior', settings.defaultExteriorWallMm, settings.defaultWallHeightMm));
   return walls;
 }
 

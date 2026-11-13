@@ -4,11 +4,12 @@ import { createFloor, createOpening, createProject, newId } from '../model/facto
 import { pointAlongWall, wallLength } from '../model/geometry';
 import { buildCompoundWalls, rebuildFloorWalls } from '../model/wallBuilder';
 import { defaultFootprint, houseContents } from '../model/footprint';
-import type { Floor, Footprint, Opening, OpeningType, Project, Room, Side, Underlay, Wall } from '../model/types';
+import { withBounds } from '../model/roomShape';
+import type { Floor, Footprint, Item, Opening, OpeningType, Project, Room, Side, Underlay, Wall } from '../model/types';
 import { boundingBox, insetPolygon, pointInRect } from '../model/geometry';
 import { createWall } from '../model/factory';
 
-export type SelectionKind = 'room' | 'wall' | 'opening' | 'siteWall' | 'siteOpening' | 'footprint';
+export type SelectionKind = 'room' | 'wall' | 'opening' | 'siteWall' | 'siteOpening' | 'footprint' | 'item';
 export interface Selection {
   kind: SelectionKind;
   id: string;
@@ -48,6 +49,9 @@ interface ProjectState {
 
   addRoom: (room: Room) => void;
   updateRoom: (id: string, patch: Partial<Room>) => void;
+  addItem: (item: Item) => void;
+  addItems: (items: Item[], floorId?: string) => void;
+  updateItem: (id: string, patch: Partial<Item>) => void;
   addWall: (wall: Wall) => void;
   updateWall: (id: string, patch: Partial<Wall>, site?: boolean) => void;
   addOpening: (type: OpeningType, wallId: string, offsetMm: number, site?: boolean) => void;
@@ -101,6 +105,7 @@ export function cloneFloor(floor: Floor, level: number): Floor {
     level,
     name: level === 0 ? 'Ground floor' : `Floor ${level}`,
     rooms: floor.rooms.map((r) => ({ ...r, id: newId() })),
+    items: (floor.items ?? []).map((it) => ({ ...it, id: newId() })),
     walls,
     openings: floor.openings
       .filter((o) => wallMap.has(o.wallId))
@@ -180,7 +185,47 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     const fid = get().activeFloorId;
     get().commit((d) => {
       const r = floorDraft(d, fid).rooms.find((x) => x.id === id);
-      if (r) Object.assign(r, patch);
+      if (!r) return;
+      // Irregular rooms: moving or resizing the bounding box moves or scales the outline with it.
+      if (r.points && !patch.points) {
+        const nx = patch.x ?? r.x;
+        const ny = patch.y ?? r.y;
+        const sx = patch.w !== undefined && r.w ? patch.w / r.w : 1;
+        const sy = patch.d !== undefined && r.d ? patch.d / r.d : 1;
+        r.points = r.points.map((p) => ({ x: nx + (p.x - r.x) * sx, y: ny + (p.y - r.y) * sy }));
+      }
+      Object.assign(r, patch);
+      if (r.points) {
+        const b = withBounds(r as Room);
+        Object.assign(r, { x: b.x, y: b.y, w: b.w, d: b.d, points: b.points });
+      }
+    });
+  },
+
+  addItem: (item) => {
+    const fid = get().activeFloorId;
+    get().commit((d) => {
+      floorDraft(d, fid).items.push(item);
+    });
+    set({ selection: { kind: 'item', id: item.id } });
+  },
+
+  addItems: (items, floorId) => {
+    const fid = floorId ?? get().activeFloorId;
+    get().commit((d) => {
+      floorDraft(d, fid).items.push(...items);
+    });
+  },
+
+  updateItem: (id, patch) => {
+    get().commit((d) => {
+      for (const f of d.floors) {
+        const it = f.items.find((x) => x.id === id);
+        if (it) {
+          Object.assign(it, patch);
+          return;
+        }
+      }
     });
   },
 
@@ -267,6 +312,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           if (o && !o.locked) d.siteOpenings = d.siteOpenings.filter((x) => x.id !== selection.id);
           break;
         }
+        case 'item': {
+          const it = f.items.find((x) => x.id === selection.id);
+          if (it && !it.locked) f.items = f.items.filter((x) => x.id !== selection.id);
+          break;
+        }
         case 'footprint':
           // Removes only the outline; rooms and walls stay where they are.
           if (d.footprint && !d.footprint.locked) d.footprint = null;
@@ -285,7 +335,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (selection.kind === 'room') {
       const r = f.rooms.find((x) => x.id === selection.id);
       if (!r) return;
-      const copy: Room = { ...r, id: newId(), name: `${r.name} copy`, x: r.x + step * 2, y: r.y + step * 2, locked: false };
+      const copy: Room = {
+        ...r,
+        id: newId(),
+        name: `${r.name} copy`,
+        x: r.x + step * 2,
+        y: r.y + step * 2,
+        points: r.points?.map((p) => ({ x: p.x + step * 2, y: p.y + step * 2 })),
+        locked: false,
+      };
       get().addRoom(copy);
     } else if (selection.kind === 'wall') {
       const w = f.walls.find((x) => x.id === selection.id);
@@ -298,6 +356,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         locked: false,
       };
       get().addWall(copy);
+    } else if (selection.kind === 'item') {
+      const it = f.items.find((x) => x.id === selection.id);
+      if (it) get().addItem({ ...it, id: newId(), x: it.x + step * 2, y: it.y + step * 2, locked: false });
     } else if (selection.kind === 'opening') {
       const o = f.openings.find((x) => x.id === selection.id);
       const w = o && f.walls.find((x) => x.id === o.wallId);
@@ -312,6 +373,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     get().commit((d) => {
       const f = floorDraft(d, activeFloorId);
       const lists: Record<Exclude<SelectionKind, 'footprint'>, { id: string; locked: boolean }[]> = {
+        item: f.items,
         room: f.rooms,
         wall: f.walls,
         opening: f.openings,
@@ -338,10 +400,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const cy = r.y + r.d / 2;
       const w = r.d;
       const dd = r.w;
+      if (r.points) r.points = r.points.map((p) => ({ x: cx - (p.y - cy), y: cy + (p.x - cx) }));
       r.x = cx - w / 2;
       r.y = cy - dd / 2;
       r.w = w;
       r.d = dd;
+      if (r.points) {
+        const b = withBounds(r as Room);
+        r.points = b.points;
+      }
       if (r.stairUp) r.stairUp = ({ N: 'E', E: 'S', S: 'W', W: 'N' } as const)[r.stairUp];
     });
   },
@@ -425,12 +492,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           if (inside.rooms.has(r.id)) {
             r.x = r2(r.x + dx);
             r.y = r2(r.y + dy);
+            if (r.points) r.points = r.points.map((p) => ({ x: r2(p.x + dx), y: r2(p.y + dy) }));
           }
         }
         for (const w of floor.walls) {
           if (inside.walls.has(w.id)) {
             w.a = { x: r2(w.a.x + dx), y: r2(w.a.y + dy) };
             w.b = { x: r2(w.b.x + dx), y: r2(w.b.y + dy) };
+          }
+        }
+      }
+      for (const floor of d.floors) {
+        for (const it of floor.items) {
+          if (inside.items.has(it.id)) {
+            it.x = r2(it.x + dx);
+            it.y = r2(it.y + dy);
           }
         }
       }

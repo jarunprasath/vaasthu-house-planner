@@ -205,3 +205,55 @@ test('import a plan drawing into the house outline without changing the plot', a
   expect(after.underlays).toBe(1);
   expect(after.walls).toBeGreaterThanOrEqual(4);
 });
+
+test('kitchen designer lays out the kitchen and reports checks', async ({ page }) => {
+  await page.getByRole('row', { name: /Kitchen/ }).click();
+  await page.getByRole('button', { name: 'Design this kitchen…' }).click();
+  await page.getByRole('button', { name: 'Create kitchen layout' }).click();
+  await expect(page.getByRole('list', { name: 'Design checks' })).toContainText('Work triangle');
+  const types = await page.evaluate(() => ((window as any).__vhp as Hook).useProjectStore.getState().project.floors[0].items.map((i: any) => i.type));
+  expect(types).toContain('hob');
+  expect(types).toContain('sink_unit');
+  await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
+  await page.keyboard.press('Control+z');
+  const after = await page.evaluate(() => ((window as any).__vhp as Hook).useProjectStore.getState().project.floors[0].items.length);
+  expect(after).toBe(0);
+});
+
+test('bathroom designer adds fittings', async ({ page }) => {
+  await page.getByRole('row', { name: /Master bath/ }).click();
+  await page.getByRole('button', { name: 'Design this bathroom…' }).click();
+  await page.getByRole('button', { name: 'Create bathroom layout' }).click();
+  const types = await page.evaluate(() => ((window as any).__vhp as Hook).useProjectStore.getState().project.floors[0].items.map((i: any) => i.type));
+  expect(types).toEqual(expect.arrayContaining(['wc_western', 'shower', 'floor_drain']));
+});
+
+test('place a sofa from the furniture list and turn it', async ({ page }) => {
+  await page.getByRole('button', { name: 'Sofa, 3-seater' }).click();
+  const p = await screen(page, 28, 22);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.getByRole('heading', { name: 'Sofa, 3-seater' })).toBeVisible();
+  await page.keyboard.press('r');
+  const it = await page.evaluate(() => ((window as any).__vhp as Hook).useProjectStore.getState().project.floors[0].items[0]);
+  expect(it.type).toBe('sofa3');
+  expect(it.rotation).toBe(90);
+});
+
+test('elevations dialog applies a style', async ({ page }) => {
+  await page.getByRole('button', { name: 'Elevations & exterior style' }).click();
+  await expect(page.getByRole('img', { name: /North elevation/ })).toBeVisible();
+  await page.getByRole('radio', { name: /Traditional South Indian/ }).click();
+  const st = await page.evaluate(() => {
+    const p = ((window as any).__vhp as Hook).useProjectStore.getState().project;
+    return { roof: p.roof.type, shade: p.exterior.sunshadeMm };
+  });
+  expect(st).toEqual({ roof: 'gable', shade: 600 });
+});
+
+test('switching to Tamil translates the interface', async ({ page }) => {
+  await page.getByRole('button', { name: 'Switch language' }).click();
+  await expect(page.getByRole('heading', { name: 'கருவிகள்' })).toBeVisible();
+  await expect(page.getByText('சமையலறை').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Switch language' }).click();
+  await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible();
+});
