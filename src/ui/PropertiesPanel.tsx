@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { isPolygonRoom, lShapeOf, roomArea, roomCentre } from '../model/roomShape';
 import { clearances, defaultFootprint, openLandArea } from '../model/footprint';
 import { floorAreas, groundCoveragePercent, plotArea } from '../model/areas';
-import { SIDE_NAMES } from '../model/factory';
+import { SIDE_NAMES, rectangularBoundary } from '../model/factory';
 import { boundingBox, rectCorners, wallDir, wallLength, zoneOf, ZONE_LABELS } from '../model/geometry';
 import { formatArea, formatLength } from '../model/units';
 import { ROOM_TYPE_LABELS, WALL_MATERIAL_LABELS } from '../model/types';
@@ -508,6 +508,53 @@ function UnderlaySection({ project }: { project: Project }) {
   );
 }
 
+function PlotSummary({ project, coverage }: { project: Project; coverage: number }) {
+  const commit = useProjectStore((st) => st.commit);
+  const open = useUiStore((st) => st.openDialog);
+  const unit = project.settings.unit;
+  const box = boundingBox(project.plot.boundary);
+  const isRect =
+    project.plot.boundary.length === 4 &&
+    project.plot.boundary.every((p) => (Math.abs(p.x - box.x) < 1 || Math.abs(p.x - box.x - box.w) < 1) && (Math.abs(p.y - box.y) < 1 || Math.abs(p.y - box.y - box.d) < 1));
+  const setSize = (w: number, d: number) =>
+    commit((dr) => {
+      dr.plot.boundary = rectangularBoundary(w, d).map((p) => ({ x: p.x + box.x, y: p.y + box.y }));
+    });
+  return (
+    <Section
+      title="Plot (overall land)"
+      action={
+        <button className="text-sm text-ink-soft underline-offset-2 hover:underline" onClick={() => open('plot')}>
+          Edit
+        </button>
+      }
+    >
+      {isRect ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Plot width (east–west)">
+            <LengthInput valueMm={box.w} unit={unit} min={1000} onCommit={(w) => setSize(w, box.d)} ariaLabel="Plot width" />
+          </Field>
+          <Field label="Plot depth (north–south)">
+            <LengthInput valueMm={box.d} unit={unit} min={1000} onCommit={(d) => setSize(box.w, d)} ariaLabel="Plot depth" />
+          </Field>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-soft">
+          Irregular plot, {formatLength(box.w, unit)} × {formatLength(box.d, unit)} overall. Choose Edit to change its corners.
+        </p>
+      )}
+      <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">
+        <dt className="text-muted">Plot area</dt>
+        <dd>{formatArea(plotArea(project), unit)}</dd>
+        <dt className="text-muted">Ground coverage</dt>
+        <dd>{coverage.toFixed(1)}%</dd>
+      </dl>
+      <p className="text-xs text-muted">The north-west corner stays in place, so the house keeps its gaps to the north and west. Edit also has setbacks, roads and neighbours.</p>
+      {project.siteWalls.length > 0 && <p className="text-xs text-warn">The compound wall does not follow a new plot size. After resizing, use “Edit compound wall” to rebuild it.</p>}
+    </Section>
+  );
+}
+
 function HouseSummary({ project }: { project: Project }) {
   const s = useProjectStore();
   const f = project.footprint;
@@ -664,18 +711,9 @@ function Overview({ project }: { project: Project }) {
             ariaLabel="Project name"
           />
         </Field>
-        <dl className="grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-          <dt className="text-muted">Plot</dt>
-          <dd>
-            {formatLength(box.w, unit)} × {formatLength(box.d, unit)}
-            {project.plot.boundary.length !== 4 && ' (irregular)'}
-          </dd>
-          <dt className="text-muted">Plot area</dt>
-          <dd>{formatArea(plotArea(project), unit)}</dd>
-          <dt className="text-muted">Ground coverage</dt>
-          <dd>{coverage.toFixed(1)}%</dd>
-        </dl>
       </Section>
+
+      <PlotSummary project={project} coverage={coverage} />
 
       <HouseSummary project={project} />
 

@@ -171,6 +171,10 @@ const TA: Record<string, string> = {
   South: 'தெற்கு',
   West: 'மேற்கு',
   Language: 'மொழி',
+  'Plot (overall land)': 'மனை (மொத்த நிலம்)',
+  'Plot width (east–west)': 'மனை அகலம் (கிழக்கு–மேற்கு)',
+  'Plot depth (north–south)': 'மனை ஆழம் (வடக்கு–தெற்கு)',
+  'House on the plot': 'மனையில் வீடு',
 };
 
 export function translate(lang: Lang, text: string): string {

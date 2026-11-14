@@ -277,3 +277,16 @@ test('3D view and walk-through open for a plan with no walls, house outline or m
   await page.waitForTimeout(500);
   expect(errors).toEqual([]);
 });
+
+test('plot size can be edited from the overview', async ({ page }) => {
+  const input = page.getByLabel('Plot width', { exact: true });
+  await input.fill("50'");
+  await input.press('Enter');
+  const w = await page.evaluate(() => {
+    const b = ((window as any).__vhp as Hook).useProjectStore.getState().project.plot.boundary;
+    return Math.max(...b.map((p: any) => p.x)) - Math.min(...b.map((p: any) => p.x));
+  });
+  expect(w).toBe(15240);
+  await page.getByRole('heading', { name: 'Plot (overall land)' }).locator('..').getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByRole('dialog', { name: 'Plot settings' })).toBeVisible();
+});
