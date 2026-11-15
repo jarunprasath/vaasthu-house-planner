@@ -6,6 +6,7 @@ import { TEMPLATES } from '../../src/templates';
 import { createSampleProject } from '../../src/templates/sample60x58';
 import { createEast40x30Project } from '../../src/templates/east40x30';
 import { createEast60x58Project } from '../../src/templates/east60x58';
+import { createEast60x58V2Project } from '../../src/templates/east60x58v2';
 import { evaluate } from '../../src/vaasthu/engine';
 import { validateProject } from '../../src/validation/validate';
 
@@ -74,5 +75,23 @@ describe('templates', () => {
     expect(zone('MD (main door)')).toBe('NE');
     expect(zone('Pooja room')).toBe('NE');
     expect(zone('Master bedroom')).toBe('SW');
+  });
+
+  it('east-facing v2 meets its brief', () => {
+    const p = createEast60x58V2Project();
+    const g = p.floors.find((f) => f.level === 0)!;
+    const room = (type: string) => g.rooms.find((r) => r.type === type)!;
+    expect([room('master_bedroom').w, room('master_bedroom').d]).toEqual([ft(16), ft(10)]);
+    expect([room('bedroom').w, room('bedroom').d]).toEqual([ft(10), ft(10)]);
+    expect(validateProject(p)).toEqual([]);
+    const v = evaluate(p);
+    expect(v.centreIssues).toEqual([]);
+    expect(v.score).toBeGreaterThanOrEqual(90);
+    const zone = (name: string) => v.items.find((i) => i.name === name)?.zone;
+    expect(zone('MD (main door)')).toBe('NE');
+    expect(zone('Pooja room')).toBe('NE');
+    expect(zone('Kitchen')).toBe('SE');
+    expect(zone('Master bedroom')).toBe('SW');
+    expect(['S', 'W', 'SW']).toContain(zone('Staircase (dog-leg)'));
   });
 });

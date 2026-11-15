@@ -6,6 +6,7 @@ import { openingAtFt, roomFt } from './helpers';
 import { createSampleProject } from './sample60x58';
 import { createEast40x30Project } from './east40x30';
 import { createEast60x58Project } from './east60x58';
+import { createEast60x58V2Project } from './east60x58v2';
 
 export interface Template {
   id: string;
@@ -58,6 +59,13 @@ export const TEMPLATES: Template[] = [
     description:
       'Roads east and west, enclosed car portico, external staircase from the portico, pooja room, compound wall with two gates.',
     create: createSampleProject,
+  },
+  {
+    id: 'east-60x58-v2',
+    name: '2BHK east-facing v2 — 40′×30′ house on 60′×58′ plot',
+    description:
+      'Master bedroom 16′×10′ south-west, bedroom 2 10′×10′ north-west, kitchen south-east, pooja and guest veranda north-east, car portico east, staircase inside on the west.',
+    create: createEast60x58V2Project,
   },
   {
     id: 'east-60x58',
