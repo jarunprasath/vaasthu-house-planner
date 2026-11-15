@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { ft } from '../../src/model/units';
 import { floorAreas, groundCoveragePercent } from '../../src/model/areas';
 import { areaValue } from '../../src/model/units';
 import { TEMPLATES } from '../../src/templates';
 import { createSampleProject } from '../../src/templates/sample60x58';
 import { createEast40x30Project } from '../../src/templates/east40x30';
+import { createEast60x58Project } from '../../src/templates/east60x58';
 import { evaluate } from '../../src/vaasthu/engine';
 import { validateProject } from '../../src/validation/validate';
 
@@ -50,6 +52,27 @@ describe('templates', () => {
     expect(zone('MD (main door)')).toBe('NE');
     expect(zone('Pooja room')).toBe('NE');
     expect(zone('Kitchen')).toBe('SE');
+    expect(zone('Master bedroom')).toBe('SW');
+  });
+
+  it('east-facing 40×30 house on 60×58 plot meets its brief', () => {
+    const p = createEast60x58Project();
+    const g = p.floors.find((f) => f.level === 0)!;
+    expect(p.footprint).toMatchObject({ w: ft(40), d: ft(30) });
+    const fp = p.footprint!;
+    expect(fp.x).toBeGreaterThanOrEqual(ft(5));
+    expect(ft(58) - (fp.y + fp.d)).toBeGreaterThanOrEqual(ft(5) - 1);
+    expect(fp.y).toBeGreaterThan(ft(58) - (fp.y + fp.d)); // more open land north than south
+    expect(g.rooms.filter((r) => r.type.includes('bedroom'))).toHaveLength(2);
+    for (const t of ['pooja', 'portico', 'sitout', 'staircase', 'kitchen', 'living'] as const) expect(g.rooms.some((r) => r.type === t)).toBe(true);
+    expect(p.floors).toHaveLength(2);
+    expect(validateProject(p)).toEqual([]);
+    const v = evaluate(p);
+    expect(v.centreIssues).toEqual([]);
+    expect(v.score).toBeGreaterThanOrEqual(90);
+    const zone = (name: string) => v.items.find((i) => i.name === name)?.zone;
+    expect(zone('MD (main door)')).toBe('NE');
+    expect(zone('Pooja room')).toBe('NE');
     expect(zone('Master bedroom')).toBe('SW');
   });
 });
