@@ -3,6 +3,8 @@ import { floorAreas, groundCoveragePercent } from '../../src/model/areas';
 import { areaValue } from '../../src/model/units';
 import { TEMPLATES } from '../../src/templates';
 import { createSampleProject } from '../../src/templates/sample60x58';
+import { createEast40x30Project } from '../../src/templates/east40x30';
+import { evaluate } from '../../src/vaasthu/engine';
 import { validateProject } from '../../src/validation/validate';
 
 describe('templates', () => {
@@ -32,5 +34,22 @@ describe('templates', () => {
     expect(issues.map((i) => i.message)).toEqual([
       expect.stringContaining('Common bath (Ground floor) has no window'),
     ]);
+  });
+
+  it('east-facing 40×30 meets its brief', () => {
+    const p = createEast40x30Project();
+    const g = p.floors.find((f) => f.level === 0)!;
+    expect(p.plot.roads.map((r) => r.side)).toEqual(['E']);
+    expect(g.rooms.filter((r) => r.type.includes('bedroom'))).toHaveLength(2);
+    for (const t of ['pooja', 'portico', 'sitout'] as const) expect(g.rooms.some((r) => r.type === t)).toBe(true);
+    expect(validateProject(p)).toEqual([]);
+    const v = evaluate(p);
+    expect(v.centreIssues).toEqual([]);
+    expect(v.score).toBeGreaterThanOrEqual(90);
+    const zone = (name: string) => v.items.find((i) => i.name === name)?.zone;
+    expect(zone('MD (main door)')).toBe('NE');
+    expect(zone('Pooja room')).toBe('NE');
+    expect(zone('Kitchen')).toBe('SE');
+    expect(zone('Master bedroom')).toBe('SW');
   });
 });

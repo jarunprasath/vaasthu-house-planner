@@ -4,6 +4,7 @@ import { buildWallsFromRooms } from '../model/wallBuilder';
 import type { Project } from '../model/types';
 import { openingAtFt, roomFt } from './helpers';
 import { createSampleProject } from './sample60x58';
+import { createEast40x30Project } from './east40x30';
 
 export interface Template {
   id: string;
@@ -56,6 +57,13 @@ export const TEMPLATES: Template[] = [
     description:
       'Roads east and west, enclosed car portico, external staircase from the portico, pooja room, compound wall with two gates.',
     create: createSampleProject,
+  },
+  {
+    id: 'east-40x30',
+    name: '2BHK east-facing — 40′×30′ plot',
+    description:
+      'Road on the east, pooja room in the north-east, sit-out and car portico at the front, kitchen south-east, master bedroom south-west.',
+    create: createEast40x30Project,
   },
   {
     id: '1bhk',

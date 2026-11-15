@@ -8,6 +8,7 @@ import { lastProjectId, loadProject } from './storage/db';
 import { useProjectStore } from './store/projectStore';
 import { useUiStore, type Tool } from './store/uiStore';
 import { createSampleProject } from './templates/sample60x58';
+import { TEMPLATES } from './templates';
 import { BottomBar } from './ui/BottomBar';
 import { ExportDialog } from './ui/dialogs/ExportDialog';
 import { PlotDialog } from './ui/dialogs/PlotDialog';
@@ -68,6 +69,18 @@ export default function App() {
   // Load the last project, or start with the sample and show the welcome screen.
   useEffect(() => {
     (async () => {
+      // Share link: ?template=<id> opens that template as a new project (then saved like any other).
+      const params = new URLSearchParams(location.search);
+      const linked = TEMPLATES.find((t) => t.id === params.get('template'));
+      if (linked) {
+        params.delete('template');
+        const q = params.toString();
+        history.replaceState(null, '', `${location.pathname}${q ? `?${q}` : ''}${location.hash}`);
+        useProjectStore.getState().load(linked.create());
+        ui.requestFit();
+        setReady(true);
+        return;
+      }
       try {
         const id = await lastProjectId();
         const p = id ? await loadProject(id) : null;
